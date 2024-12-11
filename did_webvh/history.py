@@ -9,8 +9,9 @@ import aiofiles
 
 from .const import HISTORY_FILENAME
 from .core.loader import load_history
+from .core.proof import SigningKey, di_jcs_sign
 from .core.state import DocumentMetadata, DocumentState
-from .proof import SigningKey, di_jcs_sign, verify_all, verify_params
+from .verify import verify_all, verify_params
 
 
 def write_document_state(

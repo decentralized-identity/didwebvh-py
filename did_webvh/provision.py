@@ -14,16 +14,13 @@ from typing import Optional, Union
 import aries_askar
 import jsoncanon
 
+from .askar import AskarSigningKey
 from .const import ASKAR_STORE_FILENAME, HISTORY_FILENAME, METHOD_NAME, METHOD_VERSION
 from .core.hash_utils import DEFAULT_HASH, HashInfo
+from .core.proof import VerifyingKey, di_jcs_sign
 from .core.state import DocumentState
 from .domain_path import DomainPath
 from .history import load_history_path, write_document_state
-from .proof import (
-    AskarSigningKey,
-    VerifyingKey,
-    di_jcs_sign,
-)
 
 DID_CONTEXT = "https://www.w3.org/ns/did/v1"
 DOMAIN_PATTERN = re.compile(r"^([a-zA-Z0-9%_\-]+\.)+[a-zA-Z0-9%_\.\-]{2,}$")

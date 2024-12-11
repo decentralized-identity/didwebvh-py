@@ -25,7 +25,7 @@ from .core.resolver import (
     resolve_history,
 )
 from .domain_path import DomainPath
-from .proof import verify_all
+from .verify import verify_all
 
 
 def did_history_url(didurl: DIDUrl) -> str:
