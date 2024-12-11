@@ -11,6 +11,7 @@ import jsoncanon
 from .date_utils import iso_format_datetime, make_timestamp
 from .did_url import SCID_PLACEHOLDER
 from .hash_utils import DEFAULT_HASH, HashInfo
+from .witness import WitnessRule
 
 AUTHZ_PARAMS = {"nextKeyHashes", "updateKeys"}
 
@@ -382,6 +383,14 @@ class DocumentState:
             raise ValueError("Invalid 'nextKeyHashes' parameter")
         return next_keys or []
 
+    @property
+    def witness(self) -> Optional[WitnessRule]:
+        """Fetch the active `witness` rules from the parameters."""
+        witness = self.params.get("witness")
+        if witness is not None:
+            witness = WitnessRule.deserialize(witness)
+        return witness
+
     @classmethod
     def _update_params(cls, old_params: dict, new_params: dict) -> dict:
         res = old_params.copy()
@@ -429,6 +438,10 @@ class DocumentState:
                     raise ValueError(
                         f"Unsupported value for 'updateKeys' parameter: {pvalue!r}"
                     )
+            elif param == "witness":
+                if pvalue is not None:
+                    # will throw a ValueError if invalid
+                    WitnessRule.deserialize(pvalue)
             else:
                 raise ValueError(f"Unsupported history parameter: {param!r}")
 
