@@ -2,7 +2,7 @@
 
 import json
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Union
 
@@ -12,7 +12,7 @@ from .date_utils import iso_format_datetime, make_timestamp
 from .did_url import SCID_PLACEHOLDER
 from .hash_utils import DEFAULT_HASH, HashInfo
 
-AUTH_PARAMS = {"prerotation", "nextKeyHashes", "updateKeys"}
+AUTHZ_PARAMS = {"nextKeyHashes", "updateKeys"}
 
 
 @dataclass
@@ -48,7 +48,8 @@ class DocumentState:
     version_id: str
     version_number: int
     last_version_id: str
-    proofs: list[dict]
+    proofs: list[dict] = field(default_factory=list)
+    last_key_hashes: Optional[list[str]] = None
 
     @classmethod
     def initial(
@@ -83,7 +84,6 @@ class DocumentState:
             timestamp_raw=timestamp_raw,
             version_id="",
             version_number=0,
-            proofs=[],
         )
         hash_info = HashInfo.from_name(hash_name or DEFAULT_HASH)
         scid = genesis._generate_entry_hash(hash_info)
@@ -181,10 +181,10 @@ class DocumentState:
             document=document,
             timestamp=timestamp,
             timestamp_raw=timestamp_raw,
-            last_version_id=self.version_id,
             version_id="",
             version_number=self.version_number + 1,
-            proofs=[],
+            last_version_id=self.version_id,
+            last_key_hashes=self.next_key_hashes,
         )
         entry_hash = ret._generate_entry_hash()
         ret.version_id = f"{ret.version_number}-{entry_hash}"
@@ -252,19 +252,14 @@ class DocumentState:
 
         old_params = prev_state.params if prev_state else {}
         params = cls._update_params(old_params, params_update)
-        if old_params.get("prerotation") and "updateKeys" in params_update:
-            # new update keys must match old hashes
-            check_hashes = set(old_params.get("nextKeyHashes") or [])
-            new_keys = params.get("updateKeys") or []
-            hash_info = prev_state._get_hash_info()
-            expect_hashes = set(
-                hash_info.formatted_hash(new_key.encode("utf-8")) for new_key in new_keys
-            )
-            if expect_hashes != check_hashes:
+        last_key_hashes = prev_state.next_key_hashes if prev_state else None
+        if last_key_hashes:
+            new_keys = params_update.get("updateKeys")
+            if new_keys is None:
                 raise ValueError(
-                    "New value for 'updateKeys' does not correspond "
-                    "with 'nextKeyHashes' parameter"
+                    "'updateKeys' must be provided when 'nextKeyHashes' is previously set"
                 )
+            cls._validate_key_rotation(last_key_hashes, new_keys)
 
         last_version_id = prev_state.version_id if prev_state else params["scid"]
 
@@ -283,10 +278,41 @@ class DocumentState:
             document=document,
             proofs=proofs,
             last_version_id=last_version_id,
+            last_key_hashes=last_key_hashes,
         )
         if not prev_state:
             state._check_scid_derivation()
         return state
+
+    @classmethod
+    def _validate_key_rotation(cls, key_hashes: list[str], update_keys: list[str]):
+        if not isinstance(key_hashes, list) or not all(
+            isinstance(k, str) for k in key_hashes
+        ):
+            raise ValueError(
+                "Invalid value for 'nextKeyHashes', expected list of strings"
+            )
+        if not isinstance(update_keys, list) or not all(
+            isinstance(k, str) for k in update_keys
+        ):
+            raise ValueError("Invalid value for 'updateKeys', expected list of strings")
+
+        # new update keys must be found in old hashes
+        check_hashes = {}
+        for h in key_hashes:
+            check_hashes[h] = HashInfo.identify_hash(h)
+        for new_key in update_keys:
+            found = False
+            for key_hash, hash_info in check_hashes.items():
+                check_hash = hash_info.formatted_hash(new_key.encode("utf-8"))
+                if check_hash == key_hash:
+                    found = True
+                    break
+            if not found:
+                raise ValueError(
+                    f"Encoded key '{new_key}' in 'updateKeys' is not found in previous "
+                    "'nextKeyHashes' parameter"
+                )
 
     def history_line(self) -> dict:
         """Generate the serialized history line for this document state."""
@@ -325,14 +351,9 @@ class DocumentState:
         return ctls
 
     @property
-    def is_auth_event(self) -> bool:
+    def is_authz_event(self) -> bool:
         """Determine if this document state constitutes an authorization event."""
-        return not AUTH_PARAMS.isdisjoint(self.params_update.keys())
-
-    @property
-    def prerotation(self) -> bool:
-        """Determine whether key prerotation is enabled for this document state."""
-        return self.params.get("prerotation", False)
+        return not AUTHZ_PARAMS.isdisjoint(self.params_update.keys())
 
     @property
     def scid(self) -> str:
@@ -390,13 +411,6 @@ class DocumentState:
                     raise ValueError(
                         "Parameter 'portable' may only be enabled in the first entry"
                     )
-            elif param == "prerotation":
-                if pvalue not in (True, False):
-                    raise ValueError(
-                        f"Unsupported value for 'prerotation' parameter: {pvalue!r}"
-                    )
-                if old_params.get("prerotation") and not pvalue:
-                    raise ValueError("Parameter 'prerotation' cannot be changed to False")
             elif param == "scid":
                 if old_params:
                     raise ValueError("Parameter 'scid' cannot be updated")

@@ -34,6 +34,7 @@ async def auto_provision_did(
     key_alg: str,
     pass_key: str,
     *,
+    prerotation: bool = False,
     extra_params: Optional[dict] = None,
     hash_name: Optional[str] = None,
 ) -> tuple[Path, DocumentState, AskarSigningKey]:
@@ -47,7 +48,7 @@ async def auto_provision_did(
     genesis = genesis_document(placeholder_id)
     params = deepcopy(extra_params) if extra_params else {}
     params["updateKeys"] = [update_key.multikey]
-    if params.get("prerotation"):
+    if prerotation:
         next_key = AskarSigningKey.generate(key_alg)
         hash_info = HashInfo.from_name(hash_name or DEFAULT_HASH)
         next_key_hash = hash_info.formatted_hash(next_key.multikey.encode("utf-8"))

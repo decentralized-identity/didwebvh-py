@@ -28,6 +28,7 @@ from did_webvh.provision import (
 def create_did_configuration(
     did: str, origin: str, sk: SigningKey, timestamp: datetime = None
 ) -> dict:
+    """Initialize DID configuration contents."""
     _, timestamp = make_timestamp(timestamp)
     vc = {
         "@context": [
@@ -51,9 +52,35 @@ def create_did_configuration(
 
 
 def log_document_state(doc_dir: Path, state: DocumentState):
+    """Log a document state for debugging."""
     pretty = json.dumps(state.document, indent=2)
     with open(doc_dir.joinpath(f"did-v{state.version_number}.json"), "w") as out:
         print(pretty, file=out)
+
+
+async def _rotate_key(
+    key_alg: str, next_hashes: list[str], state: DocumentState, store: aries_askar.Store
+) -> tuple[dict, AskarSigningKey]:
+    # generate replacement update key
+    rotate_key_hash = next_hashes[0]
+    next_update_key = AskarSigningKey.generate(key_alg)
+    next_key_hash = state.generate_next_key_hash(next_update_key.multikey)
+    async with store.session() as session:
+        await session.insert_key(
+            next_update_key.kid, next_update_key.key, tags={"hash": next_key_hash}
+        )
+        # fetch next update key by hash
+        fetched = await session.fetch_all_keys(tag_filter={"hash": rotate_key_hash})
+        if not fetched:
+            raise ValueError(f"Next update key not found in key store: {rotate_key_hash}")
+        update_key = AskarSigningKey(fetched[0].key)
+
+    # rotate to next update key
+    params_update = {
+        "updateKeys": [update_key.multikey],
+        "nextKeyHashes": [next_key_hash],
+    }
+    return (params_update, update_key)
 
 
 async def demo(
@@ -63,7 +90,9 @@ async def demo(
     params: Optional[dict] = None,
     perf_check: bool = False,
     hash_name: Optional[str] = None,
+    prerotation: bool = False,
 ):
+    """Run the demo DID creation and update process."""
     pass_key = "password"
     key_alg = key_alg or "ed25519"
     (doc_dir, state, genesis_key) = await auto_provision_did(
@@ -72,41 +101,14 @@ async def demo(
         pass_key=pass_key,
         extra_params=params,
         hash_name=hash_name,
+        prerotation=prerotation,
     )
     print(f"Provisioned DID: {state.document_id} in {doc_dir.name}")
     log_document_state(doc_dir, state)
     created = state.timestamp
     store_path = doc_dir.joinpath(ASKAR_STORE_FILENAME)
     store = await aries_askar.Store.open(f"sqlite://{store_path}", pass_key=pass_key)
-
-    if state.prerotation:
-        # generate replacement update key
-        rotate_key_hash = state.next_key_hashes[0]
-        next_update_key = AskarSigningKey.generate(key_alg)
-        next_key_hash = state.generate_next_key_hash(next_update_key.multikey)
-        async with store.session() as session:
-            await session.insert_key(
-                next_update_key.kid, next_update_key.key, tags={"hash": next_key_hash}
-            )
-            # fetch next update key by hash
-            fetched = await session.fetch_all_keys(tag_filter={"hash": rotate_key_hash})
-            if not fetched:
-                raise ValueError(
-                    f"Next update key not found in key store: {rotate_key_hash}"
-                )
-            update_key = AskarSigningKey(fetched[0].key)
-
-        # rotate to next update key
-        params_update = {
-            "updateKeys": [update_key.multikey],
-            "nextKeyHashes": [next_key_hash],
-        }
-        state = update_document_state(state, genesis_key, params_update=params_update)
-        write_document_state(doc_dir, state)
-        log_document_state(doc_dir, state)
-        print(f"Wrote version {state.version_id}")
-    else:
-        update_key = genesis_key
+    update_key = genesis_key
 
     # add services
     doc = state.document_copy()
@@ -137,7 +139,13 @@ async def demo(
             "serviceEndpoint": f"https://{domain}/.well-known/whois.vc",
         },
     ]
-    state = update_document_state(state, update_key, document=doc)
+    if next_hashes := state.next_key_hashes:
+        params_update, update_key = await _rotate_key(key_alg, next_hashes, state, store)
+    else:
+        params_update = None
+    state = update_document_state(
+        state, update_key, document=doc, params_update=params_update
+    )
     write_document_state(doc_dir, state)
     log_document_state(doc_dir, state)
     print(f"Wrote version {state.version_id}")
@@ -151,10 +159,7 @@ async def demo(
     assert meta.created == created
     assert meta.updated == state.timestamp
     assert meta.deactivated is False
-    if state.prerotation:
-        assert meta.version_number == 3
-    else:
-        assert meta.version_number == 2
+    assert meta.version_number == 2
 
     # output did configuration
     did_conf = create_did_configuration(
@@ -198,4 +203,4 @@ async def demo(
 
 if __name__ == "__main__":
     domain = argv[1] if len(argv) > 1 else "domain.example"
-    asyncio.run(demo(domain, key_alg="ed25519", params={"prerotation": True}))
+    asyncio.run(demo(domain, key_alg="ed25519", prerotation=True))

@@ -242,7 +242,10 @@ def verify_proofs(state: DocumentState, prev_state: DocumentState, is_final: boo
     proofs = state.proofs
     if not proofs:
         raise ValueError("Missing history version proof(s)")
-    update_keys = (prev_state or state).update_keys
+    if not prev_state or prev_state.next_key_hashes:
+        update_keys = state.update_keys
+    else:
+        update_keys = prev_state.update_keys
     for proof in proofs:
         method_id = proof.get("verificationMethod")
         if not isinstance(method_id, str):
@@ -293,5 +296,5 @@ def verify_all(state: DocumentState, prev_state: DocumentState, is_final: bool):
     """Verify the proofs and parameters on a document state."""
     # FIXME add resolution context instead of is_final flag?
     verify_params(state, prev_state, is_final)
-    if state.version_id == 1 or state.is_auth_event or is_final:
+    if state.version_number == 1 or state.is_authz_event or is_final:
         verify_proofs(state, prev_state, is_final)

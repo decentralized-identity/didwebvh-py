@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 from aries_askar import Key as AskarKey
 
-from did_webvh.core.state import DocumentState
+from did_webvh.core.state import DocumentState, HashInfo
 from did_webvh.proof import (
     AskarSigningKey,
     _check_document_id_format,
@@ -54,39 +54,40 @@ def mock_document() -> dict:
 
 
 @pytest.fixture()
-def mock_document_state() -> DocumentState:
+def mock_document_state(mock_sk, mock_next_sk) -> DocumentState:
+    pk1 = mock_sk.multikey
+    pk2 = mock_next_sk.multikey
+    next_pk = HashInfo.from_name("sha2-256").formatted_hash(pk2.encode("utf-8"))
     return DocumentState(
         params={
-            "prerotation": True,
-            "updateKeys": ["z6MkohYbQoXp3yHTcwnceL5uuSDukZu2NcP6uAAHANS6dJun"],
-            "nextKeyHashes": ["Qmbj4wLBmB8rj48svucmeffwDTDyt33s61w1iupwHLUfcn"],
+            "updateKeys": [pk1],
+            "nextKeyHashes": [next_pk],
             "method": "did:tdw:0.4",
-            "scid": "Qmdr1y71TPEv8kkxKJi5b7H3qTbEak3MXiqmsLrgMVjRj6",
+            "scid": "QmapF3WxwoFFugMjrnx2iCwfTWuFwxHEBouPmX9fm9jEN3",
         },
         params_update={
-            "prerotation": True,
-            "updateKeys": ["z6MkohYbQoXp3yHTcwnceL5uuSDukZu2NcP6uAAHANS6dJun"],
-            "nextKeyHashes": ["Qmbj4wLBmB8rj48svucmeffwDTDyt33s61w1iupwHLUfcn"],
+            "updateKeys": [pk1],
+            "nextKeyHashes": [next_pk],
             "method": "did:tdw:0.4",
-            "scid": "Qmdr1y71TPEv8kkxKJi5b7H3qTbEak3MXiqmsLrgMVjRj6",
+            "scid": "QmapF3WxwoFFugMjrnx2iCwfTWuFwxHEBouPmX9fm9jEN3",
         },
         document={
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:Qmdr1y71TPEv8kkxKJi5b7H3qTbEak3MXiqmsLrgMVjRj6:domain.example",
+            "id": "did:tdw:QmapF3WxwoFFugMjrnx2iCwfTWuFwxHEBouPmX9fm9jEN3:domain.example",
         },
         timestamp=datetime(2024, 9, 17, 17, 29, 32, 0, tzinfo=timezone.utc),
         timestamp_raw="2024-09-11T17:29:32Z",
         version_id="1-QmXXb2mW7hZVLM5PPjm5iKCYS2PHQnoLePLK1d172ABrDZ",
         version_number=1,
-        last_version_id="Qmdr1y71TPEv8kkxKJi5b7H3qTbEak3MXiqmsLrgMVjRj6",
+        last_version_id="QmapF3WxwoFFugMjrnx2iCwfTWuFwxHEBouPmX9fm9jEN3",
         proofs=[
             {
                 "type": "DataIntegrityProof",
                 "cryptosuite": "eddsa-jcs-2022",
                 "verificationMethod": "did:key:z6MkohYbQoXp3yHTcwnceL5uuSDukZu2NcP6uAAHANS6dJun#z6MkohYbQoXp3yHTcwnceL5uuSDukZu2NcP6uAAHANS6dJun",
-                "created": "2024-10-01T22:11:25Z",
+                "created": "2024-12-11T21:49:26Z",
                 "proofPurpose": "authentication",
-                "proofValue": "z3yw9vFuHgn2Z2CKf7KKbrZEYYV1y6jhUbCVpVQcMuCso9M7R6jPDuyTytKjmPA99UBFF9q3cyUZwaJZ5qaezpQC2",
+                "proofValue": "z3bAmyurHc7S5junyQ3s92HSMVn1bQUqLfmaoMCuyArDM9TtFaPEPB69bBApxXFZcg6nWnZCb2EtKrg24trXbqh2A",
             }
         ],
     )
@@ -97,6 +98,15 @@ def mock_sk() -> AskarSigningKey:
     return AskarSigningKey(
         AskarKey.from_jwk(
             '{"crv":"Ed25519","kty":"OKP","x":"iWIGdqmPSeg8Ov89VzUrKuLD7pJ8_askEwJGE1R5Zqk","d":"RJDq2-dY85mW1bbDMcrXPObeL-Ud-b8MrPO-iqxajv0"}'
+        )
+    )
+
+
+@pytest.fixture()
+def mock_next_sk() -> AskarSigningKey:
+    return AskarSigningKey(
+        AskarKey.from_jwk(
+            '{"crv":"Ed25519","kty":"OKP","x":"xeHpv1RMsUQUYQ74BFTcVTifqFjbkn-pjK9InsVt8EU","d":"uHFsgrJ9xQ8npyB5pNwjPdn7xABkGKYmXD2ZV5spz6I"}'
         )
     )
 
@@ -162,7 +172,7 @@ def test_jcs_sign_raw(mock_document):
         )
 
 
-def test_di_jcs_verify(mock_document_state, mock_sk):
+def test_di_jcs_verify(mock_document_state, mock_sk, mock_next_sk):
     bad_proof = {
         "type": "DataIntegrityProof",
         "cryptosuite": "eddsa-jcs-2022",
@@ -171,14 +181,7 @@ def test_di_jcs_verify(mock_document_state, mock_sk):
         "proofPurpose": "authentication",
         "proofValue": "zhLxMHk6oaVmoJ2Xo4Hw8QQG9RP4eNPuDg4co7ExcCXbe5sRgomLjCgQ9vevLVPWGar79iAh4t697jJ9iMYFNQ8r",
     }
-    good_proof = {
-        "type": "DataIntegrityProof",
-        "cryptosuite": "eddsa-jcs-2022",
-        "verificationMethod": "did:key:z6MkohYbQoXp3yHTcwnceL5uuSDukZu2NcP6uAAHANS6dJun#z6MkohYbQoXp3yHTcwnceL5uuSDukZu2NcP6uAAHANS6dJun",
-        "created": "2024-10-01T22:11:25Z",
-        "proofPurpose": "authentication",
-        "proofValue": "z3yw9vFuHgn2Z2CKf7KKbrZEYYV1y6jhUbCVpVQcMuCso9M7R6jPDuyTytKjmPA99UBFF9q3cyUZwaJZ5qaezpQC2",
-    }
+    good_proof = mock_document_state.proofs[0]
     method = {
         "type": "Multikey",
         "publicKeyMultibase": mock_sk.multikey,
@@ -254,25 +257,25 @@ def test_check_document_id_format():
         )
 
 
-def test_verify_proofs(mock_document_state, mock_sk):
+def test_verify_proofs(mock_document_state, mock_sk, mock_next_sk):
     verify_proofs(mock_document_state, None, is_final=False)
 
+    pk2 = mock_next_sk.multikey
     prev_state = mock_document_state
     current_state = DocumentState(
         params={
-            "prerotation": True,
-            "updateKeys": ["z6MkmTNGEZUFRkfKd5TKooEGfdMqdokphHarKSngiPvvJdGR"],
-            "nextKeyHashes": ["QmPPNYiBqpc3gxRG4FrxbBrp3KC8V4pePJxqxgNwkQMpaR"],
+            "updateKeys": [pk2],
+            "nextKeyHashes": [],
             "method": "did:tdw:0.4",
-            "scid": "Qmdr1y71TPEv8kkxKJi5b7H3qTbEak3MXiqmsLrgMVjRj6",
+            "scid": "QmapF3WxwoFFugMjrnx2iCwfTWuFwxHEBouPmX9fm9jEN3",
         },
         params_update={
-            "updateKeys": ["z6MkmTNGEZUFRkfKd5TKooEGfdMqdokphHarKSngiPvvJdGR"],
-            "nextKeyHashes": ["QmPPNYiBqpc3gxRG4FrxbBrp3KC8V4pePJxqxgNwkQMpaR"],
+            "updateKeys": [pk2],
+            "nextKeyHashes": [],
         },
         document={
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:Qmdr1y71TPEv8kkxKJi5b7H3qTbEak3MXiqmsLrgMVjRj6:domain.example",
+            "id": "did:tdw:QmapF3WxwoFFugMjrnx2iCwfTWuFwxHEBouPmX9fm9jEN3:domain.example",
         },
         timestamp=datetime(2024, 9, 11, 17, 29, 33, 0, tzinfo=timezone.utc),
         timestamp_raw="2024-09-11T17:29:33Z",
@@ -283,10 +286,10 @@ def test_verify_proofs(mock_document_state, mock_sk):
             {
                 "type": "DataIntegrityProof",
                 "cryptosuite": "eddsa-jcs-2022",
-                "verificationMethod": "did:key:z6MkohYbQoXp3yHTcwnceL5uuSDukZu2NcP6uAAHANS6dJun#z6MkohYbQoXp3yHTcwnceL5uuSDukZu2NcP6uAAHANS6dJun",
-                "created": "2024-10-01T22:13:05Z",
+                "verificationMethod": "did:key:z6MksmiAGYB2k2DWnRBeK5qooVKhaRZGXi89PFpKLPboJyor#z6MksmiAGYB2k2DWnRBeK5qooVKhaRZGXi89PFpKLPboJyor",
+                "created": "2024-12-11T21:51:46Z",
                 "proofPurpose": "authentication",
-                "proofValue": "zjxnnS6LZ1CaCbzY3MjLnLM19T4eguw7Zq1LCrKZqjSx35snC8s9k1wr6W2E66r4zsKaDvMwBB7Rkiq5kjeMdEPu",
+                "proofValue": "z3XmLPS6ZQ8P7fHydwJN7rR1HG2pvFL5Lb3QA2i4fLUN9gGZkHTcGXXL6oa1GNiLbT5u64murxhhCXB96dhZTPz9a",
             }
         ],
     )

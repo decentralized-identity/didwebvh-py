@@ -173,15 +173,14 @@ def test_load_history_line():
         "versionId": "1-QmX9fVx3xDJVRY15c2zMvjQN7nKPp4hQsazbbDSGxMwRHG",
         "versionTime": "2024-09-10T18:29:27Z",
         "parameters": {
-            "prerotation": True,
             "updateKeys": ["z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"],
             "nextKeyHashes": ["QmTnBEPaARViW8ikCA875H8TR21biFPg9rqijdyZG5tzLw"],
-            "method": "did:webvh:0.4",
-            "scid": "QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS",
+            "method": "did:tdw:0.4",
+            "scid": "Qmdo3g6SbfK5U99c3hk9kdXvMxpH3zPo4XewW2RkUx4boY",
         },
         "state": {
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:webvh:QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS:domain.example",
+            "id": "did:tdw:Qmdo3g6SbfK5U99c3hk9kdXvMxpH3zPo4XewW2RkUx4boY:domain.example",
         },
         "proof": [
             {
@@ -212,7 +211,7 @@ def test_load_history_line():
     # Invalid - Params isn't a dict
     line = deepcopy(valid_line)
     line["parameters"] = (
-        '{"prerotation": True,"updateKeys": ["z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"],"nextKeyHashes": ["QmTnBEPaARViW8ikCA875H8TR21biFPg9rqijdyZG5tzLw"],"method": "did:webvh:0.4","scid": "QmXwpXEc44Rw8A7u7okUvsg3HC69JAKV6b3wX4thyV7nYe",}'
+        '{"updateKeys": ["z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"],"nextKeyHashes": ["QmTnBEPaARViW8ikCA875H8TR21biFPg9rqijdyZG5tzLw"],"method": "did:tdw:0.4","scid": "QmXwpXEc44Rw8A7u7okUvsg3HC69JAKV6b3wX4thyV7nYe",}'
     )
     with pytest.raises(ValueError):
         DocumentState.load_history_line(
@@ -227,15 +226,14 @@ def test_load_history_line_with_prev_state():
             "versionId": "1-QmX9fVx3xDJVRY15c2zMvjQN7nKPp4hQsazbbDSGxMwRHG",
             "versionTime": "2024-09-10T18:29:27Z",
             "parameters": {
-                "prerotation": True,
                 "updateKeys": ["z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"],
                 "nextKeyHashes": ["QmTnBEPaARViW8ikCA875H8TR21biFPg9rqijdyZG5tzLw"],
-                "method": "did:webvh:0.4",
-                "scid": "QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS",
+                "method": "did:tdw:0.4",
+                "scid": "Qmdo3g6SbfK5U99c3hk9kdXvMxpH3zPo4XewW2RkUx4boY",
             },
             "state": {
                 "@context": ["https://www.w3.org/ns/did/v1"],
-                "id": "did:webvh:QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS:domain.example",
+                "id": "did:tdw:Qmdo3g6SbfK5U99c3hk9kdXvMxpH3zPo4XewW2RkUx4boY:domain.example",
             },
             "proof": [
                 {
