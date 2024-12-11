@@ -45,22 +45,22 @@ class VerifyingKey(ABC):
     @property
     @abstractmethod
     def kid(self) -> Optional[str]:
-        """The key identifier."""
+        """Access the key identifier."""
 
     @property
     @abstractmethod
     def algorithm(self) -> str:
-        """The key algorithm."""
+        """Access the key algorithm."""
 
     @property
     @abstractmethod
     def multicodec_name(self) -> Optional[str]:
-        """The standard codec identifier as defined by `multicodec`."""
+        """Access the standard codec identifier as defined by `multicodec`."""
 
     @property
     @abstractmethod
     def public_key_bytes(self) -> bytes:
-        """The raw bytes of the public key."""
+        """Access the raw bytes of the public key."""
 
     @property
     def multikey(self) -> MultiKey:
@@ -91,12 +91,12 @@ class AskarSigningKey(SigningKey):
 
     @property
     def algorithm(self) -> str:
-        """The algorithm of the signing key."""
+        """Access the algorithm of the signing key."""
         return self.key.algorithm.value
 
     @property
     def kid(self) -> Optional[str]:
-        """The key identifier of the signing key."""
+        """Access the key identifier of the signing key."""
         return self._kid
 
     @kid.setter
@@ -105,7 +105,7 @@ class AskarSigningKey(SigningKey):
 
     @property
     def multicodec_name(self) -> Optional[str]:
-        """The standard codec identifier as defined by `multicodec`."""
+        """Access the standard codec identifier as defined by `multicodec`."""
         match self.key.algorithm:
             case aries_askar.KeyAlg.ED25519:
                 return "ed25519-pub"
@@ -116,7 +116,7 @@ class AskarSigningKey(SigningKey):
 
     @property
     def public_key_bytes(self) -> bytes:
-        """The raw bytes of the public key."""
+        """Access the raw bytes of the public key."""
         return self.key.get_public_bytes()
 
     def sign_message(self, message: bytes) -> bytes:
@@ -191,6 +191,8 @@ def di_jcs_verify_raw(proof_input: dict, proof: dict, method: dict):
     """Verify a proof against a dictionary value."""
     if proof.get("type") != "DataIntegrityProof":
         raise ValueError("Unsupported proof type")
+    if "proofValue" not in proof or not isinstance(proof["proofValue"], str):
+        raise ValueError("Missing or invalid 'proofValue'")
     created = proof.get("created")
     if created:
         make_timestamp(created)  # validate timestamp formatting only
