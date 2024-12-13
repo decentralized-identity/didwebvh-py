@@ -17,7 +17,7 @@ import jsoncanon
 from .askar import AskarSigningKey
 from .const import ASKAR_STORE_FILENAME, HISTORY_FILENAME, METHOD_NAME, METHOD_VERSION
 from .core.hash_utils import DEFAULT_HASH, HashInfo
-from .core.proof import VerifyingKey, di_jcs_sign
+from .core.proof import VerifyingKey
 from .core.state import DocumentState
 from .domain_path import DomainPath
 from .history import load_history_path, write_document_state
@@ -69,8 +69,7 @@ async def auto_provision_did(
     await store.close()
 
     state.proofs.append(
-        di_jcs_sign(
-            state,
+        state.create_proof(
             update_key,
             timestamp=state.timestamp,
         )

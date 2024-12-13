@@ -9,8 +9,8 @@ import aiofiles
 
 from .const import HISTORY_FILENAME
 from .core.loader import load_history
-from .core.proof import SigningKey, di_jcs_sign
 from .core.state import DocumentMetadata, DocumentState
+from .core.types import SigningKey
 from .verify import verify_all, verify_params
 
 
@@ -66,5 +66,5 @@ def update_document_state(
         timestamp=timestamp,
     )
     # FIXME ensure the signing key is present in updateKeys
-    state.proofs.append(di_jcs_sign(state, update_key, timestamp=state.timestamp))
+    state.proofs.append(state.create_proof(update_key, timestamp=state.timestamp))
     return state

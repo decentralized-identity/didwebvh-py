@@ -1,10 +1,19 @@
 from copy import deepcopy
+from datetime import datetime
 from json import JSONDecodeError
 
 import pytest
 
+from did_webvh.askar import AskarSigningKey
 from did_webvh.core.hash_utils import HashInfo
 from did_webvh.core.state import DocumentState
+
+
+@pytest.fixture()
+def mock_sk() -> AskarSigningKey:
+    return AskarSigningKey.from_jwk(
+        '{"crv":"Ed25519","kty":"OKP","x":"iWIGdqmPSeg8Ov89VzUrKuLD7pJ8_askEwJGE1R5Zqk","d":"RJDq2-dY85mW1bbDMcrXPObeL-Ud-b8MrPO-iqxajv0"}'
+    )
 
 
 def test_initial_document_state():
@@ -274,3 +283,37 @@ def test_load_history_line_with_prev_state():
         },
         prev_state=prev_state,
     )
+
+
+def test_jcs_sign_verify(mock_sk):
+    mock_state = DocumentState.initial(
+        params={
+            "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
+            "method": "did:tdw:0.4",
+        },
+        document={
+            "@context": ["https://www.w3.org/ns/did/v1"],
+            "id": "did:tdw:{SCID}:domain.example\n",
+        },
+    )
+    method = {
+        "type": "Multikey",
+        "publicKeyMultibase": mock_sk.multikey,
+    }
+    proof = mock_state.create_proof(mock_sk)
+    mock_state.verify_proof(proof, method)
+    proof = mock_state.create_proof(
+        sk=mock_sk,
+        timestamp=datetime.now(),
+    )
+    mock_state.verify_proof(proof, method)
+    proof = mock_state.create_proof(
+        sk=mock_sk,
+        timestamp=datetime.now(),
+        kid="kid",
+    )
+    mock_state.verify_proof(proof, method)
+
+    proof["proofPurpose"] = "bad proof"
+    with pytest.raises(ValueError):
+        mock_state.verify_proof(proof, method)

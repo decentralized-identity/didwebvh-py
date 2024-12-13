@@ -1,6 +1,9 @@
 """Core witnessing definitions."""
 
+import contextlib
 from dataclasses import dataclass
+
+from .proof import di_jcs_verify, resolve_did_key
 
 
 @dataclass
@@ -58,3 +61,35 @@ class WitnessRule:
             raise ValueError("Expected list for 'witnesses' in 'witness' value")
         witnesses = [WitnessEntry.deserialize(w) for w in witnesses]
         return WitnessRule(threshold, witnesses)
+
+
+def verify_witness_proofs(proofs: list[dict]) -> dict[str, set[str]]:
+    """Verify a list of witness proofs.
+
+    Returns: a mapping from `versionId` to a list of `verificationMethod` IDs.
+    """
+    res = {}
+    for proof_entry in proofs:
+        if not isinstance(proof_entry, dict):
+            raise ValueError("Invalid witness proof, expected dict")
+        ver_id = proof_entry.get("versionId")
+        if not isinstance(ver_id, str) or not ver_id:
+            raise ValueError("Invalid witness proof, missing or invalid 'versionId'")
+        if proof := proof_entry.get("proof"):
+            if isinstance(proof, dict):
+                proof = [proof]
+            if isinstance(proof, list):
+                valid = set()
+                for proof_dict in proof:
+                    if isinstance(proof_dict, dict):
+                        method_id = proof_dict.get("verificationMethod")
+                        with contextlib.suppress(ValueError):
+                            vmethod = resolve_did_key(method_id)
+                            di_jcs_verify(proof_entry, proof_dict, vmethod)
+                            valid.add(vmethod["publicKeyMultibase"])
+                if valid:
+                    if ver_id in res:
+                        res[ver_id].update(valid)
+                    else:
+                        res[ver_id] = valid
+    return res

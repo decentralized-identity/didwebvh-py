@@ -2,7 +2,7 @@
 
 from .const import METHOD_NAME, METHOD_VERSION
 from .core.did_url import DIDUrl
-from .core.proof import di_jcs_verify
+from .core.proof import resolve_did_key
 from .core.state import DocumentState
 from .domain_path import DomainPath
 
@@ -20,7 +20,6 @@ def _check_document_id_format(doc_id: str, scid: str):
 
 def verify_proofs(state: DocumentState, prev_state: DocumentState, is_final: bool):
     """Verify all proofs on a document state."""
-    doc_id = state.document_id
     proofs = state.proofs
     if not proofs:
         raise ValueError("Missing history version proof(s)")
@@ -30,31 +29,10 @@ def verify_proofs(state: DocumentState, prev_state: DocumentState, is_final: boo
         update_keys = prev_state.update_keys
     for proof in proofs:
         method_id = proof.get("verificationMethod")
-        if not isinstance(method_id, str):
-            raise ValueError(f"Invalid proof verification method: {type(method_id)}")
-        if "#" not in method_id:
-            raise ValueError("Expected verification method reference with fragment")
-        if method_id.startswith("#"):
-            method_fragment = method_id[1:]
-            method_id = doc_id + method_id
-            method_ctl = doc_id
-        else:
-            fpos = method_id.find("#")
-            method_ctl = method_id[:fpos]
-            fpos = fpos + 1
-            method_fragment = method_id[fpos:]
-        if not method_ctl.startswith("did:key:"):
-            raise ValueError(f"Unsupported verification method: {method_id}")
-        method_key = method_ctl.removeprefix("did:key:")
-        if method_key != method_fragment:
-            raise ValueError(
-                f"Verification method fragment does not match public key: {method_id}"
-            )
-        if method_key not in update_keys:
-            raise ValueError(f"Cannot resolve verification method: {method_id}")
-        vmethod = {"type": "Multikey", "publicKeyMultibase": method_key}
-        di_jcs_verify(
-            state=state,
+        vmethod = resolve_did_key(method_id)
+        if vmethod["publicKeyMultibase"] not in update_keys:
+            raise ValueError(f"Update key not found: {method_id}")
+        state.verify_proof(
             proof=proof,
             method=vmethod,
         )

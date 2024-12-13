@@ -11,6 +11,8 @@ import jsoncanon
 from .date_utils import iso_format_datetime, make_timestamp
 from .did_url import SCID_PLACEHOLDER
 from .hash_utils import DEFAULT_HASH, HashInfo
+from .proof import di_jcs_sign, di_jcs_verify
+from .types import SigningKey, VerifyingKey
 from .witness import WitnessRule
 
 AUTHZ_PARAMS = {"nextKeyHashes", "updateKeys"}
@@ -51,6 +53,7 @@ class DocumentState:
     last_version_id: str
     proofs: list[dict] = field(default_factory=list)
     last_key_hashes: Optional[list[str]] = None
+    last_witness_used: bool = False
 
     @classmethod
     def initial(
@@ -186,6 +189,7 @@ class DocumentState:
             version_number=self.version_number + 1,
             last_version_id=self.version_id,
             last_key_hashes=self.next_key_hashes,
+            last_witness_used=self.witness_used,
         )
         entry_hash = ret._generate_entry_hash()
         ret.version_id = f"{ret.version_number}-{entry_hash}"
@@ -280,6 +284,7 @@ class DocumentState:
             proofs=proofs,
             last_version_id=last_version_id,
             last_key_hashes=last_key_hashes,
+            last_witness_used=(prev_state and prev_state.witness_used),
         )
         if not prev_state:
             state._check_scid_derivation()
@@ -390,6 +395,31 @@ class DocumentState:
         if witness is not None:
             witness = WitnessRule.deserialize(witness)
         return witness
+
+    @property
+    def witness_used(self) -> bool:
+        """Determine whether witness rules have ever been used."""
+        return self.last_witness_used or bool(self.witness)
+
+    def create_proof(
+        self,
+        sk: SigningKey,
+        *,
+        timestamp: Optional[datetime] = None,
+        kid: Optional[str] = None,
+    ) -> dict:
+        """Generate a proof for a document state with a signing key."""
+        return di_jcs_sign(
+            self.history_line(),
+            sk,
+            purpose="authentication",
+            timestamp=timestamp,
+            kid=kid,
+        )
+
+    def verify_proof(self, proof: dict, method: VerifyingKey | dict):
+        """Verify a proof against a document state."""
+        return di_jcs_verify(self.history_line(), proof, method)
 
     @classmethod
     def _update_params(cls, old_params: dict, new_params: dict) -> dict:

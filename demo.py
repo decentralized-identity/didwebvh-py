@@ -13,8 +13,9 @@ import aries_askar
 from did_webvh.askar import AskarSigningKey
 from did_webvh.const import ASKAR_STORE_FILENAME, HISTORY_FILENAME
 from did_webvh.core.date_utils import make_timestamp
-from did_webvh.core.proof import SigningKey, di_jcs_sign_raw
+from did_webvh.core.proof import di_jcs_sign
 from did_webvh.core.state import DocumentState
+from did_webvh.core.types import SigningKey
 from did_webvh.history import (
     load_history_path,
     update_document_state,
@@ -45,7 +46,7 @@ def create_did_configuration(
             "origin": origin,
         },
     }
-    vc["proof"] = di_jcs_sign_raw(vc, sk, "assertionMethod")
+    vc["proof"] = di_jcs_sign(vc, sk, purpose="assertionMethod")
     return {
         "@context": "https://identity.foundation/.well-known/did-configuration/v1",
         "linked_dids": [vc],

@@ -5,7 +5,6 @@ import pytest
 from did_tdw.askar import AskarSigningKey
 from did_tdw.core.proof import (
     di_jcs_sign,
-    di_jcs_sign_raw,
     di_jcs_verify,
 )
 from did_tdw.core.state import DocumentState
@@ -18,44 +17,8 @@ def mock_sk() -> AskarSigningKey:
     )
 
 
-def test_jcs_sign_verify(mock_sk):
-    mock_state = DocumentState.initial(
-        params={
-            "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-            "method": "did:tdw:0.4",
-        },
-        document={
-            "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:{SCID}:domain.example\n",
-        },
-    )
-    method = {
-        "type": "Multikey",
-        "publicKeyMultibase": mock_sk.multikey,
-    }
-    proof = di_jcs_sign(mock_state, sk=mock_sk)
-    di_jcs_verify(mock_state, proof, method)
-    proof = di_jcs_sign(
-        mock_state,
-        sk=mock_sk,
-        timestamp=datetime.now(),
-    )
-    di_jcs_verify(mock_state, proof, method)
-    proof = di_jcs_sign(
-        mock_state,
-        sk=mock_sk,
-        timestamp=datetime.now(),
-        kid="kid",
-    )
-    di_jcs_verify(mock_state, proof, method)
-
-    proof["proofPurpose"] = "bad proof"
-    with pytest.raises(ValueError):
-        di_jcs_verify(mock_state, proof, method)
-
-
-def test_jcs_sign_raw():
-    mock_state = DocumentState.initial(
+def test_jcs_sign():
+    proof_input = DocumentState.initial(
         params={
             "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
             "method": "did:tdw:0.4",
@@ -65,28 +28,44 @@ def test_jcs_sign_raw():
             "id": "did:tdw:{SCID}:domain.example\n",
         },
     ).history_line()
-    result = di_jcs_sign_raw(
-        mock_state,
-        sk=AskarSigningKey.generate("ed25519"),
+    sk1 = AskarSigningKey.generate("ed25519")
+    proof = di_jcs_sign(
+        proof_input,
+        sk=sk1,
         purpose="authentication",
         challenge="challenge",
     )
-    assert isinstance(result, dict)
-    di_jcs_sign_raw(
-        mock_state,
-        sk=AskarSigningKey.generate("p256"),
+    assert isinstance(proof, dict)
+    di_jcs_verify(proof_input, proof, sk1)
+    # test key loading from verification method
+    di_jcs_verify(proof_input, proof, sk1.get_verification_method())
+
+    sk2 = AskarSigningKey.generate("p256")
+    proof = di_jcs_sign(
+        proof_input,
+        sk=sk2,
         purpose="authentication",
         challenge="challenge",
     )
-    di_jcs_sign_raw(
-        mock_state,
-        sk=AskarSigningKey.generate("p384"),
+    di_jcs_verify(proof_input, proof, sk2)
+
+    with pytest.raises(ValueError):
+        # test incorrect key
+        di_jcs_verify(proof_input, proof, sk1)
+
+    sk3 = AskarSigningKey.generate("p384")
+    proof = di_jcs_sign(
+        proof_input,
+        sk=sk3,
         purpose="authentication",
         challenge="challenge",
     )
+    di_jcs_verify(proof_input, proof, sk3)
+
     with pytest.raises(TypeError):
-        di_jcs_sign_raw(
-            mock_state,
+        # test unsupported key type
+        _ = di_jcs_sign(
+            proof_input,
             sk=AskarSigningKey.generate("bls12381g1g2"),
             purpose="authentication",
             challenge="challenge",
