@@ -11,11 +11,11 @@ from typing import Optional
 import aries_askar
 
 from did_webvh.askar import AskarSigningKey
-from did_webvh.const import ASKAR_STORE_FILENAME, HISTORY_FILENAME
+from did_webvh.const import ASKAR_STORE_FILENAME, HISTORY_FILENAME, WITNESS_FILENAME
 from did_webvh.core.date_utils import make_timestamp
 from did_webvh.core.proof import di_jcs_sign
 from did_webvh.core.state import DocumentState
-from did_webvh.core.types import SigningKey
+from did_webvh.core.types import SigningKey, VerifyingKey
 from did_webvh.history import (
     load_history_path,
     update_document_state,
@@ -85,6 +85,11 @@ async def _rotate_key(
     return (params_update, update_key)
 
 
+def _format_did_key(key: VerifyingKey) -> str:
+    pk = key.multikey
+    return f"did:key:{pk}#{pk}"
+
+
 async def demo(
     domain: str,
     *,
@@ -93,10 +98,26 @@ async def demo(
     perf_check: bool = False,
     hash_name: Optional[str] = None,
     prerotation: bool = False,
+    witness: bool = False,
 ):
     """Run the demo DID creation and update process."""
     pass_key = "password"
     key_alg = key_alg or "ed25519"
+    if witness:
+        witness_keys = [
+            AskarSigningKey.generate("ed25519"),
+            AskarSigningKey.generate("ed25519"),
+            AskarSigningKey.generate("ed25519"),
+        ]
+        params = {
+            **(params or {}),
+            "witness": {
+                "threshold": 2,
+                "witnesses": [
+                    {"id": _format_did_key(w), "weight": 1} for w in witness_keys
+                ],
+            },
+        }
     (doc_dir, state, genesis_key) = await auto_provision_did(
         domain,
         key_alg,
@@ -154,6 +175,18 @@ async def demo(
 
     await store.close()
 
+    # output witness proofs
+    if witness:
+        proof_data = {"versionId": state.version_id}
+        proof_data["proof"] = [
+            di_jcs_sign(proof_data, w)
+            for w in witness_keys[:2]  # signing with 2/3 keys
+        ]
+        with open(doc_dir.joinpath(WITNESS_FILENAME), "w") as out:
+            out.write(json.dumps(proof_data, indent=2))
+            out.write("\n")
+        print(f"Wrote {WITNESS_FILENAME}")
+
     # verify history
     history_path = doc_dir.joinpath(HISTORY_FILENAME)
     check_state, meta = await load_history_path(history_path)
@@ -205,4 +238,4 @@ async def demo(
 
 if __name__ == "__main__":
     domain = argv[1] if len(argv) > 1 else "domain.example"
-    asyncio.run(demo(domain, key_alg="ed25519", prerotation=True))
+    asyncio.run(demo(domain, key_alg="ed25519", prerotation=True, witness=True))

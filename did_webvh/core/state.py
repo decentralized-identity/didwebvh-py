@@ -53,7 +53,6 @@ class DocumentState:
     last_version_id: str
     proofs: list[dict] = field(default_factory=list)
     last_key_hashes: Optional[list[str]] = None
-    last_witness_used: bool = False
 
     @classmethod
     def initial(
@@ -189,7 +188,6 @@ class DocumentState:
             version_number=self.version_number + 1,
             last_version_id=self.version_id,
             last_key_hashes=self.next_key_hashes,
-            last_witness_used=self.witness_used,
         )
         entry_hash = ret._generate_entry_hash()
         ret.version_id = f"{ret.version_number}-{entry_hash}"
@@ -284,7 +282,6 @@ class DocumentState:
             proofs=proofs,
             last_version_id=last_version_id,
             last_key_hashes=last_key_hashes,
-            last_witness_used=(prev_state and prev_state.witness_used),
         )
         if not prev_state:
             state._check_scid_derivation()
@@ -389,17 +386,12 @@ class DocumentState:
         return next_keys or []
 
     @property
-    def witness(self) -> Optional[WitnessRule]:
+    def witness_rule(self) -> Optional[WitnessRule]:
         """Fetch the active `witness` rules from the parameters."""
-        witness = self.params.get("witness")
-        if witness is not None:
-            witness = WitnessRule.deserialize(witness)
-        return witness
-
-    @property
-    def witness_used(self) -> bool:
-        """Determine whether witness rules have ever been used."""
-        return self.last_witness_used or bool(self.witness)
+        rule = self.params.get("witness")
+        if rule is not None:
+            rule = WitnessRule.deserialize(rule)
+        return rule
 
     def create_proof(
         self,

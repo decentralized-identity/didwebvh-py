@@ -3,7 +3,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import aiofiles
 
@@ -35,7 +35,7 @@ def write_document_state(
 
 
 async def load_history_path(
-    path: Union[str, Path],
+    path: str | Path,
     *,
     version_id: Optional[int] = None,
     version_time: Optional[datetime] = None,
@@ -57,7 +57,7 @@ def update_document_state(
     update_key: SigningKey,
     document: Optional[dict] = None,
     params_update: Optional[dict] = None,
-    timestamp: Union[str, datetime, None] = None,
+    timestamp: str | datetime | None = None,
 ) -> DocumentState:
     """Update a document state, including a new signed proof."""
     state = prev_state.create_next(
