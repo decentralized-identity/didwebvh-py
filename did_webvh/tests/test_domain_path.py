@@ -1,6 +1,6 @@
 import pytest
 
-from did_tdw.domain_path import DomainPath
+from did_webvh.domain_path import DomainPath
 
 
 def test_parse_normalized_domain_path():
