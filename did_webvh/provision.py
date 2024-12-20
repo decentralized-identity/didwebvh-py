@@ -1,4 +1,4 @@
-"""Provisioning of new did:tdw DIDs."""
+"""Provisioning of new did:webvh DIDs."""
 
 import argparse
 import asyncio
@@ -37,7 +37,7 @@ async def auto_provision_did(
     extra_params: Optional[dict] = None,
     hash_name: Optional[str] = None,
 ) -> tuple[Path, DocumentState, AskarSigningKey]:
-    """Automatically provision a new did:tdw DID.
+    """Automatically provision a new did:webvh DID.
 
     This will create a new Askar store for key management.
     """
@@ -144,7 +144,7 @@ def provision_did(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="provision a new did:tdw DID")
+    parser = argparse.ArgumentParser(description="provision a new did:webvh DID")
     parser.add_argument(
         "--auto",
         action="store_true",

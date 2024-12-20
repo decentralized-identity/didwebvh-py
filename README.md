@@ -1,6 +1,6 @@
 # Trust DID Web - Python
 
-This repository includes Python libraries for working with `did:tdw` (Trust DID Web) DID documents and the underlying log format. Methods are provided for provisioning and updating DID documents as well as a resolving existing `did:tdw` DIDs. Currently, version 0.4 of [the specification](https://bcgov.github.io/trustdidweb/) is implemented.
+This repository includes Python libraries for working with `did:webvh` (Trust DID Web) DID documents and the underlying log format. Methods are provided for provisioning and updating DID documents as well as a resolving existing `did:webvh` DIDs. Currently, version 0.4 of [the specification](https://bcgov.github.io/trustdidweb/) is implemented.
 
 ## Prerequisites
 
@@ -12,10 +12,10 @@ poetry install
 
 ## Usage
 
-A new `did:tdw` DID can be minted using the provision command. This will create a new Askar keystore for handling the signing key.
+A new `did:webvh` DID can be minted using the provision command. This will create a new Askar keystore for handling the signing key.
 
 ```sh
-python3 -m did_tdw.provision --auto "domain.example"
+python3 -m did_webvh.provision --auto "domain.example"
 ```
 
 This will output a new directory named after the new DID, containing `did.jsonl` (the DID log) and `did.json` (the current state of the document).
@@ -23,7 +23,7 @@ This will output a new directory named after the new DID, containing `did.jsonl`
 To automatically update the DID, edit `did.json` and execute the update command (use the identifier output from the provision command):
 
 ```sh
-python3 -m did_tdw.update --auto "did:tdw:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example"
+python3 -m did_webvh.update --auto "did:webvh:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example"
 ```
 
 ## DID Resolution
@@ -31,21 +31,21 @@ python3 -m did_tdw.update --auto "did:tdw:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73i
 The resolver script may be invoked via the command line, and supports dereferencing of fragments and paths:
 
 ```sh
-python3 -m did_tdw.resolver "did:tdw:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example"
+python3 -m did_webvh.resolver "did:webvh:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example"
 ```
 
 ```sh
-python3 -m did_tdw.resolver "did:tdw:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example#key-1"
+python3 -m did_webvh.resolver "did:webvh:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example#key-1"
 ```
 
 ```sh
-python3 -m did_tdw.resolver "did:tdw:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example/whois.vc"
+python3 -m did_webvh.resolver "did:webvh:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example/whois.vc"
 ```
 
 For testing, this script also accepts the path to the local DID history file:
 
 ```sh
-python3 -m did_tdw.resolver -f did.jsonl "did:tdw:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example"
+python3 -m did_webvh.resolver -f did.jsonl "did:webvh:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example"
 ```
 
 ## Demo

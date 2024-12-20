@@ -2,13 +2,13 @@
 requires-python = ">=3.10"
 
 [tool.poetry]
-name = "did-tdw"
+name = "did-webvh-jamie-testing"
 version = "0.2.1"
-description = "This repository includes Python libraries for working with `did:tdw` (Trust DID Web) DID documents and the underlying log format."
+description = "This repository includes Python libraries for working with `did:webvh` (Trust DID Web) DID documents and the underlying log format."
 authors = []
 license = "Apache-2.0"
 readme = "README.md"
-packages = [{ include = "did_tdw" }]
+packages = [{ include = "did_webvh" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"

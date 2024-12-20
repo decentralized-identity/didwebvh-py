@@ -1,4 +1,4 @@
-"""Domain and path handling for did:tdw identifiers."""
+"""Domain and path handling for did:webvh identifiers."""
 
 import urllib
 from dataclasses import dataclass, field
@@ -9,7 +9,7 @@ from .core.did_url import SCID_PLACEHOLDER
 
 @dataclass
 class DomainPath:
-    """Domain and path (and port) compatible with a did:tdw identifier."""
+    """Domain and path (and port) compatible with a did:webvh identifier."""
 
     scid: str
     domain: str

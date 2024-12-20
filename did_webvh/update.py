@@ -1,4 +1,4 @@
-"""Update existing did:tdw DIDs."""
+"""Update existing did:webvh DIDs."""
 
 import argparse
 import asyncio
@@ -85,7 +85,7 @@ async def update_did(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="update a did:tdw DID")
+    parser = argparse.ArgumentParser(description="update a did:webvh DID")
     parser.add_argument("did", help="the DID to update")
     parser.add_argument(
         "--auto",

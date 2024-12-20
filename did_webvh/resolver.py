@@ -1,4 +1,4 @@
-"""Resolution of did:tdw DIDs."""
+"""Resolution of did:webvh DIDs."""
 
 import argparse
 import asyncio
@@ -29,7 +29,7 @@ from .proof import verify_all
 
 
 def did_history_url(didurl: DIDUrl) -> str:
-    """Determine the URL of the DID history file from a did:tdw DID URL."""
+    """Determine the URL of the DID history file from a did:webvh DID URL."""
     if didurl.method != METHOD_NAME:
         raise ValueError("Invalid DID")
     pathinfo = DomainPath.parse_identifier(didurl.identifier)
@@ -85,7 +85,7 @@ async def resolve_did(
     add_implicit: bool = True,
     resolve_url: Optional[Callable[[str], Awaitable[AsyncIterator[str]]]] = None,
 ) -> ResolutionResult:
-    """Resolve a did:tdw DID or DID URL.
+    """Resolve a did:webvh DID or DID URL.
 
     Resolution parameters within a DID URL are not applied.
     """
@@ -154,7 +154,7 @@ async def _resolve_relative_ref(
 
 
 async def resolve(didurl: str, *, local_history: Optional[Path] = None) -> dict:
-    """Resolve a did:tdw DID URL, applying any included DID resolution parameters."""
+    """Resolve a did:webvh DID URL, applying any included DID resolution parameters."""
     try:
         didurl = DIDUrl.decode(args.didurl)
     except ValueError as err:
@@ -201,7 +201,7 @@ async def _resolve_url(url: str) -> AsyncIterator[str]:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="resolve a did:tdw DID URL")
+    parser = argparse.ArgumentParser(description="resolve a did:webvh DID URL")
     parser.add_argument("-f", "--file", help="the path to a local DID history file")
     parser.add_argument("--accept", help="specify the MIME type(s) to accept")
     parser.add_argument("didurl", help="the DID URL to resolve")

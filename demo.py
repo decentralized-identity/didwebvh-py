@@ -1,4 +1,4 @@
-"""Demo script for did:tdw generation and updating."""
+"""Demo script for did:webvh generation and updating."""
 
 import asyncio
 import json
@@ -10,16 +10,16 @@ from typing import Optional
 
 import aries_askar
 
-from did_tdw.const import ASKAR_STORE_FILENAME, HISTORY_FILENAME
-from did_tdw.core.date_utils import make_timestamp
-from did_tdw.core.state import DocumentState
-from did_tdw.history import (
+from did_webvh.const import ASKAR_STORE_FILENAME, HISTORY_FILENAME
+from did_webvh.core.date_utils import make_timestamp
+from did_webvh.core.state import DocumentState
+from did_webvh.history import (
     load_history_path,
     update_document_state,
     write_document_state,
 )
-from did_tdw.proof import AskarSigningKey, SigningKey, di_jcs_sign_raw
-from did_tdw.provision import (
+from did_webvh.proof import AskarSigningKey, SigningKey, di_jcs_sign_raw
+from did_webvh.provision import (
     auto_provision_did,
     encode_verification_method,
 )
