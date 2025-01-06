@@ -1,6 +1,3 @@
-[project]
-requires-python = ">=3.10"
-
 [tool.poetry]
 name = "did-webvh-jamie-testing"
 version = "0.2.1"

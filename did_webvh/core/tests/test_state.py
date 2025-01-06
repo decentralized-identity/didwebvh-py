@@ -177,11 +177,11 @@ def test_load_history_line():
             "updateKeys": ["z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"],
             "nextKeyHashes": ["QmTnBEPaARViW8ikCA875H8TR21biFPg9rqijdyZG5tzLw"],
             "method": "did:webvh:0.4",
-            "scid": "QmNTwtP59iQwTK1JjFi3M4zuKkUQUcDspENXEJmSL8zUR9",
+            "scid": "QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS",
         },
         "state": {
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:webvh:QmNTwtP59iQwTK1JjFi3M4zuKkUQUcDspENXEJmSL8zUR9:domain.example",
+            "id": "did:webvh:QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS:domain.example",
         },
         "proof": [
             {
@@ -231,11 +231,11 @@ def test_load_history_line_with_prev_state():
                 "updateKeys": ["z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"],
                 "nextKeyHashes": ["QmTnBEPaARViW8ikCA875H8TR21biFPg9rqijdyZG5tzLw"],
                 "method": "did:webvh:0.4",
-                "scid": "QmNTwtP59iQwTK1JjFi3M4zuKkUQUcDspENXEJmSL8zUR9",
+                "scid": "QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS",
             },
             "state": {
                 "@context": ["https://www.w3.org/ns/did/v1"],
-                "id": "did:webvh:QmNTwtP59iQwTK1JjFi3M4zuKkUQUcDspENXEJmSL8zUR9:domain.example",
+                "id": "did:webvh:QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS:domain.example",
             },
             "proof": [
                 {

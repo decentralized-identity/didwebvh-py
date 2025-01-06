@@ -184,6 +184,9 @@ def di_jcs_sign_raw(
 
 def di_jcs_verify(state: DocumentState, proof: dict, method: dict):
     """Verify a proof against a document state."""
+    print("*********************************")
+    print(state)
+    print("\n")
     return di_jcs_verify_raw(state.history_line(), proof, method)
 
 
@@ -195,6 +198,8 @@ def di_jcs_verify_raw(proof_input: dict, proof: dict, method: dict):
     if created:
         make_timestamp(created)  # validate timestamp formatting only
 
+    print("22222222222222222")
+    print(method.get("publicKeyMultibase"))
     (codec, key_bytes) = MultiKey(method.get("publicKeyMultibase")).decode()
     suite_name = proof.get("cryptosuite")
     suite = None
@@ -208,6 +213,7 @@ def di_jcs_verify_raw(proof_input: dict, proof: dict, method: dict):
     hash_fn = suite["hash"]
     data_hash = hash_fn(di_jcs_canonicalize_input(proof_input)).digest()
     proof = proof.copy()
+    print(proof)
     signature = multibase.decode(proof.pop("proofValue"))
     options_hash = hash_fn(jsoncanon.canonicalize(proof)).digest()
     sig_input = options_hash + data_hash
