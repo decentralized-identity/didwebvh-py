@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "did-webvh-jamie-testing"
+name = "did-webvh"
 version = "0.2.1"
-description = "This repository includes Python libraries for working with `did:webvh` (Trust DID Web) DID documents and the underlying log format."
+description = "This repository includes Python libraries for working with `did:webvh` (web with verified history) DID documents and the underlying log format."
 authors = []
 license = "Apache-2.0"
 readme = "README.md"
