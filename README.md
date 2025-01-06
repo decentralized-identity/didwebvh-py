@@ -1,6 +1,6 @@
 # DID Web Verified Hostory - Python
 
-This repository includes Python libraries for working with `did:webvh` (DID Web Verified History) DID documents and the underlying log format. Methods are provided for provisioning and updating DID documents as well as a resolving existing `did:webvh` DIDs. Currently, version 0.4 of [the specification](https://bcgov.github.io/trustdidweb/) is implemented.
+This repository includes Python libraries for working with `did:webvh` (did:web + Verified History) DID documents and the underlying log format. Methods are provided for provisioning and updating DID documents as well as a resolving existing `did:webvh` DIDs. Currently, version 0.4 of [the specification](https://bcgov.github.io/trustdidweb/) is implemented.
 
 ## Prerequisites
 
