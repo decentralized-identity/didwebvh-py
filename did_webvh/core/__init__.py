@@ -1,4 +1,4 @@
-"""DID log handling for did:tdw."""
+"""DID log handling for did:webvh."""
 
 from . import date_utils, hash_utils, loader, resolver, state
 

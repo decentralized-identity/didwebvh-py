@@ -3,8 +3,8 @@ from json import JSONDecodeError
 
 import pytest
 
-from did_tdw.core.hash_utils import HashInfo
-from did_tdw.core.state import DocumentState
+from did_webvh.core.hash_utils import HashInfo
+from did_webvh.core.state import DocumentState
 
 
 def test_initial_document_state():
@@ -12,19 +12,19 @@ def test_initial_document_state():
     DocumentState.initial(
         params={
             "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-            "method": "did:tdw:0.4",
+            "method": "did:webvh:0.4",
         },
         document={
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:{SCID}:domain.example\n",
+            "id": "did:webvh:{SCID}:domain.example\n",
         },
     )
     DocumentState.initial(
         params={
             "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-            "method": "did:tdw:0.4",
+            "method": "did:webvh:0.4",
         },
-        document='{"@context": ["https://www.w3.org/ns/did/v1"],"id": "did:tdw:{SCID}:domain.example"}',
+        document='{"@context": ["https://www.w3.org/ns/did/v1"],"id": "did:webvh:{SCID}:domain.example"}',
     )
 
     # Invalid json document string
@@ -32,16 +32,16 @@ def test_initial_document_state():
         DocumentState.initial(
             params={
                 "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-                "method": "did:tdw:0.4",
+                "method": "did:webvh:0.4",
             },
-            document='{"@context": ["https://www.w3.org/ns/did/v1"],"id": "did:tdw:{SCID}:domain.example",}',
+            document='{"@context": ["https://www.w3.org/ns/did/v1"],"id": "did:webvh:{SCID}:domain.example",}',
         )
     # Doc id is not a string
     with pytest.raises(ValueError):
         DocumentState.initial(
             params={
                 "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-                "method": "did:tdw:0.4",
+                "method": "did:webvh:0.4",
             },
             document={
                 "@context": ["https://www.w3.org/ns/did/v1"],
@@ -53,11 +53,11 @@ def test_initial_document_state():
         DocumentState.initial(
             params={
                 "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-                "method": "did:tdw:0.4",
+                "method": "did:webvh:0.4",
             },
             document={
                 "@context": ["https://www.w3.org/ns/did/v1"],
-                "id": "did:tdw:{NOTSCID}:domain.example\n",
+                "id": "did:webvh:{NOTSCID}:domain.example\n",
             },
         )
 
@@ -66,11 +66,11 @@ def test_generate_entry_hash():
     doc_state = DocumentState.initial(
         params={
             "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-            "method": "did:tdw:0.4",
+            "method": "did:webvh:0.4",
         },
         document={
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:{SCID}:domain.example\n",
+            "id": "did:webvh:{SCID}:domain.example\n",
         },
     )
 
@@ -86,11 +86,11 @@ def test_check_version_id():
     doc_state = DocumentState.initial(
         params={
             "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-            "method": "did:tdw:0.4",
+            "method": "did:webvh:0.4",
         },
         document={
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:{SCID}:domain.example\n",
+            "id": "did:webvh:{SCID}:domain.example\n",
         },
     )
     doc_state.check_version_id()
@@ -105,11 +105,11 @@ def test_generate_next_key_hash():
     doc_state = DocumentState.initial(
         params={
             "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-            "method": "did:tdw:0.4",
+            "method": "did:webvh:0.4",
         },
         document={
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:{SCID}:domain.example\n",
+            "id": "did:webvh:{SCID}:domain.example\n",
         },
     )
     doc_state.generate_next_key_hash(
@@ -121,11 +121,11 @@ def test_check_scid_derivation():
     doc_state = DocumentState.initial(
         params={
             "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-            "method": "did:tdw:0.4",
+            "method": "did:webvh:0.4",
         },
         document={
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:{SCID}:domain.example\n",
+            "id": "did:webvh:{SCID}:domain.example\n",
         },
     )
     doc_state._check_scid_derivation()
@@ -158,11 +158,11 @@ def test_create_next():
     doc_state = DocumentState.initial(
         params={
             "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-            "method": "did:tdw:0.4",
+            "method": "did:webvh:0.4",
         },
         document={
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:{SCID}:domain.example\n",
+            "id": "did:webvh:{SCID}:domain.example\n",
         },
     )
     assert isinstance(doc_state.create_next(), DocumentState)
@@ -176,12 +176,12 @@ def test_load_history_line():
             "prerotation": True,
             "updateKeys": ["z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"],
             "nextKeyHashes": ["QmTnBEPaARViW8ikCA875H8TR21biFPg9rqijdyZG5tzLw"],
-            "method": "did:tdw:0.4",
-            "scid": "QmNTwtP59iQwTK1JjFi3M4zuKkUQUcDspENXEJmSL8zUR9",
+            "method": "did:webvh:0.4",
+            "scid": "QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS",
         },
         "state": {
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:QmNTwtP59iQwTK1JjFi3M4zuKkUQUcDspENXEJmSL8zUR9:domain.example",
+            "id": "did:webvh:QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS:domain.example",
         },
         "proof": [
             {
@@ -212,7 +212,7 @@ def test_load_history_line():
     # Invalid - Params isn't a dict
     line = deepcopy(valid_line)
     line["parameters"] = (
-        '{"prerotation": True,"updateKeys": ["z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"],"nextKeyHashes": ["QmTnBEPaARViW8ikCA875H8TR21biFPg9rqijdyZG5tzLw"],"method": "did:tdw:0.4","scid": "QmXwpXEc44Rw8A7u7okUvsg3HC69JAKV6b3wX4thyV7nYe",}'
+        '{"prerotation": True,"updateKeys": ["z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"],"nextKeyHashes": ["QmTnBEPaARViW8ikCA875H8TR21biFPg9rqijdyZG5tzLw"],"method": "did:webvh:0.4","scid": "QmXwpXEc44Rw8A7u7okUvsg3HC69JAKV6b3wX4thyV7nYe",}'
     )
     with pytest.raises(ValueError):
         DocumentState.load_history_line(
@@ -230,12 +230,12 @@ def test_load_history_line_with_prev_state():
                 "prerotation": True,
                 "updateKeys": ["z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"],
                 "nextKeyHashes": ["QmTnBEPaARViW8ikCA875H8TR21biFPg9rqijdyZG5tzLw"],
-                "method": "did:tdw:0.4",
-                "scid": "QmNTwtP59iQwTK1JjFi3M4zuKkUQUcDspENXEJmSL8zUR9",
+                "method": "did:webvh:0.4",
+                "scid": "QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS",
             },
             "state": {
                 "@context": ["https://www.w3.org/ns/did/v1"],
-                "id": "did:tdw:QmNTwtP59iQwTK1JjFi3M4zuKkUQUcDspENXEJmSL8zUR9:domain.example",
+                "id": "did:webvh:QmVRRs85sBWGDzJuwceYqbPcKJ94Ffw8NbUfSNHZqKTCrS:domain.example",
             },
             "proof": [
                 {
@@ -261,7 +261,7 @@ def test_load_history_line_with_prev_state():
             },
             "state": {
                 "@context": ["https://www.w3.org/ns/did/v1"],
-                "id": "did:tdw:QmNTwtP59iQwTK1JjFi3M4zuKkUQUcDspENXEJmSL8zUR9:domain.example",
+                "id": "did:webvh:QmNTwtP59iQwTK1JjFi3M4zuKkUQUcDspENXEJmSL8zUR9:domain.example",
             },
             "proof": [
                 {

@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 import pytest
 from aries_askar import Key as AskarKey
 
-from did_tdw.core.state import DocumentState
-from did_tdw.proof import (
+from did_webvh.core.state import DocumentState
+from did_webvh.proof import (
     AskarSigningKey,
     _check_document_id_format,
     di_jcs_sign,
@@ -23,32 +23,32 @@ def mock_document() -> dict:
             "https://identity.foundation/.well-known/did-configuration/v1",
             "https://identity.foundation/linked-vp/contexts/v1",
         ],
-        "id": "did:tdw:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000",
+        "id": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000",
         "authentication": [
-            "did:tdw:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs"
+            "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs"
         ],
         "service": [
             {
-                "id": "did:tdw:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#domain",
+                "id": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#domain",
                 "type": "LinkedDomains",
                 "serviceEndpoint": "https://example.com%3A5000",
             },
             {
-                "id": "did:tdw:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#whois",
+                "id": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#whois",
                 "type": "LinkedVerifiablePresentation",
                 "serviceEndpoint": "https://example.com%3A5000/.well-known/whois.vc",
             },
         ],
         "verificationMethod": [
             {
-                "id": "did:tdw:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs",
-                "controller": "did:tdw:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000",
+                "id": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs",
+                "controller": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000",
                 "type": "Multikey",
                 "publicKeyMultibase": "z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs",
             }
         ],
         "assertionMethod": [
-            "did:tdw:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs"
+            "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs"
         ],
     }
 
@@ -105,11 +105,11 @@ def test_jcs_sign_verify(mock_sk):
     mock_state = DocumentState.initial(
         params={
             "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-            "method": "did:tdw:0.4",
+            "method": "did:webvh:0.4",
         },
         document={
             "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "did:tdw:{SCID}:domain.example\n",
+            "id": "did:webvh:{SCID}:domain.example\n",
         },
     )
     method = {
@@ -191,11 +191,11 @@ def test_di_jcs_verify(mock_document_state, mock_sk):
 
 
 VALID_DID = [
-    "did:tdw:0000000000000000000000000000:mydomain.com",
-    "did:tdw:0000000000000000000000000000:mydomain.com%3A500",
-    "did:tdw:0000000000000000000000000000:mydomain.com%3A500:path",
-    "did:tdw:0000000000000000000000000000:mydomain.com%3A500:path:extra",
-    "did:tdw:0000000000000000000000000000:mydomain.com:path:extra",
+    "did:webvh:0000000000000000000000000000:mydomain.com",
+    "did:webvh:0000000000000000000000000000:mydomain.com%3A500",
+    "did:webvh:0000000000000000000000000000:mydomain.com%3A500:path",
+    "did:webvh:0000000000000000000000000000:mydomain.com%3A500:path:extra",
+    "did:webvh:0000000000000000000000000000:mydomain.com:path:extra",
 ]
 
 
@@ -206,20 +206,20 @@ def test_valid_document_id(did: str):
 
 INVALID_DID = [
     # missing did:
-    "DID:tdw:0000000000000000000000000000.mydomain.com",
+    "DID:webvh:0000000000000000000000000000.mydomain.com",
     # invalid method
     "did:other:0000000000000000000000000000.mydomain.com",
     # missing scid
-    "did:tdw:domain.example",
-    "did:tdw:domain.example:path",
+    "did:webvh:domain.example",
+    "did:webvh:domain.example:path",
     # missing tld
-    "did:tdw:0000000000000000000000000000",
+    "did:webvh:0000000000000000000000000000",
     # missing domain
-    "did:tdw:0000000000000000000000000000.com",
-    "did:tdw:mydomain.0000000000000000000000000000",
-    "did:tdw:mydomain.com.0000000000000000000000000000",
+    "did:webvh:0000000000000000000000000000.com",
+    "did:webvh:mydomain.0000000000000000000000000000",
+    "did:webvh:mydomain.com.0000000000000000000000000000",
     # duplicate
-    "did:tdw:0000000000000000000000000000.mydomain.com:path:0000000000000000000000000000",
+    "did:webvh:0000000000000000000000000000.mydomain.com:path:0000000000000000000000000000",
 ]
 
 
@@ -231,13 +231,13 @@ def test_invalid_document_id(did: str):
 
 def test_check_document_id_format():
     _check_document_id_format(
-        "did:tdw:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com",
+        "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com",
         "QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4",
     )
     # scid doesn't match
     with pytest.raises(ValueError):
         _check_document_id_format(
-            "did:tdw:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGY:example.com",
+            "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGY:example.com",
             "QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4",
         )
     # wrong did method (web)

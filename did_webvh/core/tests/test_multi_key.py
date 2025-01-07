@@ -1,6 +1,6 @@
 import pytest
 
-from did_tdw.core.multi_key import MultiKey
+from did_webvh.core.multi_key import MultiKey
 
 
 def test_multi_key():
