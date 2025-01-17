@@ -1,6 +1,6 @@
-from did_tdw.askar import AskarSigningKey
-from did_tdw.core.proof import di_jcs_sign
-from did_tdw.core.witness import verify_witness_proofs
+from did_webvh.askar import AskarSigningKey
+from did_webvh.core.proof import di_jcs_sign
+from did_webvh.core.witness import verify_witness_proofs
 
 
 def test_witness_filter():

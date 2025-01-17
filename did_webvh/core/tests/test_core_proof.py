@@ -2,12 +2,12 @@ from datetime import datetime
 
 import pytest
 
-from did_tdw.askar import AskarSigningKey
-from did_tdw.core.proof import (
+from did_webvh.askar import AskarSigningKey
+from did_webvh.core.proof import (
     di_jcs_sign,
     di_jcs_verify,
 )
-from did_tdw.core.state import DocumentState
+from did_webvh.core.state import DocumentState
 
 
 @pytest.fixture()
