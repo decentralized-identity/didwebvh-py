@@ -6,7 +6,7 @@ from did_webvh.askar import AskarSigningKey
 from did_webvh.core.state import DocumentState, HashInfo
 from did_webvh.verify import (
     _check_document_id_format,
-    verify_proofs,
+    _verify_proofs,
 )
 
 
@@ -32,7 +32,7 @@ def mock_document() -> dict:
             {
                 "id": "did:tdw:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#whois",
                 "type": "LinkedVerifiablePresentation",
-                "serviceEndpoint": "https://example.com%3A5000/.well-known/whois.vc",
+                "serviceEndpoint": "https://example.com%3A5000/whois.vp",
             },
         ],
         "verificationMethod": [
@@ -168,7 +168,7 @@ def test_check_document_id_format():
 
 
 def test_verify_proofs(mock_document_state, mock_next_sk):
-    verify_proofs(mock_document_state, None)
+    _verify_proofs(mock_document_state, None)
 
     pk2 = mock_next_sk.multikey
     prev_state = mock_document_state
@@ -204,7 +204,7 @@ def test_verify_proofs(mock_document_state, mock_next_sk):
         ],
     )
 
-    verify_proofs(state=current_state, prev_state=prev_state)
+    _verify_proofs(state=current_state, prev_state=prev_state)
 
     # Bad proof for current state
     current_state.proofs = [
@@ -218,4 +218,4 @@ def test_verify_proofs(mock_document_state, mock_next_sk):
         }
     ]
     with pytest.raises(ValueError):
-        verify_proofs(state=current_state, prev_state=prev_state)
+        _verify_proofs(state=current_state, prev_state=prev_state)

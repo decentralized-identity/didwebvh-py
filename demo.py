@@ -159,7 +159,7 @@ async def demo(
         {
             "id": doc["id"] + "#whois",
             "type": "LinkedVerifiablePresentation",
-            "serviceEndpoint": f"https://{domain}/.well-known/whois.vc",
+            "serviceEndpoint": f"https://{domain}/whois.vp",
         },
     ]
     if next_hashes := state.next_key_hashes:

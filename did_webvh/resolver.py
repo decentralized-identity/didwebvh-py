@@ -48,7 +48,7 @@ def extend_document_services(document: dict, base_url: str):
                 "@context": "https://identity.foundation/linked-vp/contexts/v1",
                 "id": doc_id + "#whois",
                 "type": "LinkedVerifiablePresentation",
-                "serviceEndpoint": base_url + "whois.vc",
+                "serviceEndpoint": base_url + "whois.vp",
             }
         )
 
@@ -81,7 +81,7 @@ async def resolve_did(
         version_time=version_time,
     )
     if result.document and add_implicit:
-        extend_document_services(result.document, did_base_url(didurl))
+        extend_document_services(result.document, did_base_url(didurl, files=True))
     return result
 
 

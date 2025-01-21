@@ -59,7 +59,7 @@ mock_document = {
         {
             "id": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#whois",
             "type": "LinkedVerifiablePresentation",
-            "serviceEndpoint": "https://example.com%3A5000/.well-known/whois.vc",
+            "serviceEndpoint": "https://example.com%3A5000/whois.vp",
         },
     ],
     "verificationMethod": [
@@ -180,7 +180,7 @@ def test_normalize_services():
         {
             "id": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000",
             "type": "LinkedVerifiablePresentation",
-            "serviceEndpoint": "https://example.com%3A5000/.well-known/whois.vc",
+            "serviceEndpoint": "https://example.com%3A5000/whois.vp",
         },
     ]
 
