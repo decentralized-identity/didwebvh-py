@@ -1,7 +1,4 @@
 [project]
-requires-python = ">= 3.10"
-
-[tool.poetry]
 name = "did-webvh"
 version = "0.2.1"
 description = "This repository includes Python libraries for working with `did:webvh` (did:web + Verified History) DID documents and the underlying log format."
@@ -9,11 +6,9 @@ authors = []
 license = "Apache-2.0"
 readme = "README.md"
 packages = [{ include = "did_webvh" }]
+requires-python = ">= 3.10, <4"
 
 [tool.poetry.dependencies]
-python = "^3.10"
-
-aiofiles = "^24.1.0"
 aiohttp = "^3.10.5"
 aries-askar = ">=0.3.2"
 base58 = "~2.1.0"
