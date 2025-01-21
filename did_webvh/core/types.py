@@ -46,7 +46,7 @@ class VerifyingKey(ABC):
     def verify_signature(self, message: bytes, signature: bytes) -> bytes:
         """Verify a signature over `message` against this public key.
 
-        Raises: ValueError on verification failure.
+        Raises: `ValueError` on verification failure.
         """
 
 

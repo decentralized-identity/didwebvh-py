@@ -17,7 +17,7 @@ from did_webvh.core.proof import di_jcs_sign
 from did_webvh.core.state import DocumentState
 from did_webvh.core.types import SigningKey, VerifyingKey
 from did_webvh.history import (
-    load_history_path,
+    load_local_history,
     update_document_state,
     write_document_state,
 )
@@ -189,7 +189,7 @@ async def demo(
 
     # verify history
     history_path = doc_dir.joinpath(HISTORY_FILENAME)
-    check_state, meta = await load_history_path(history_path)
+    check_state, meta = await load_local_history(history_path)
     assert check_state == state
     assert meta.created == created
     assert meta.updated == state.timestamp
@@ -217,7 +217,7 @@ async def demo(
         print(f"Update duration: {dur:0.2f}")
 
         start = perf_counter()
-        (latest, meta) = await load_history_path(history_path)
+        (latest, meta) = await load_local_history(history_path)
         assert latest == state
         dur = perf_counter() - start
         print(f"Validate duration: {dur:0.2f}")

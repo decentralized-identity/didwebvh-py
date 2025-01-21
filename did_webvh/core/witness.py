@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from .proof import di_jcs_verify, resolve_did_key
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class WitnessEntry:
     """A single witness definition."""
 
@@ -34,12 +34,12 @@ class WitnessEntry:
         return WitnessEntry(ident, weight)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class WitnessRule:
     """Witness configuration rules."""
 
     threshold: int
-    witnesses: list[WitnessEntry]
+    witnesses: tuple[WitnessEntry]
 
     @classmethod
     def deserialize(cls, value) -> "WitnessRule":
@@ -59,8 +59,18 @@ class WitnessRule:
             raise ValueError("Expected integer for 'threshold' in 'witness' value")
         if not isinstance(witnesses, list):
             raise ValueError("Expected list for 'witnesses' in 'witness' value")
-        witnesses = [WitnessEntry.deserialize(w) for w in witnesses]
+        witnesses = (WitnessEntry.deserialize(w) for w in witnesses)
         return WitnessRule(threshold, witnesses)
+
+    # def verify(self)
+
+
+@dataclass(frozen=True, slots=True)
+class CheckedWitness:
+    """The result of a successful witness verification."""
+
+    witness_id: str
+    version_id: str
 
 
 def verify_witness_proofs(proofs: list[dict]) -> dict[str, set[str]]:

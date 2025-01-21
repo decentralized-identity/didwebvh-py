@@ -1,8 +1,12 @@
 """High-level document state verification."""
 
+from asyncio import get_running_loop
+from collections.abc import Awaitable
+
 from .const import METHOD_NAME, METHOD_VERSION
 from .core.did_url import DIDUrl
 from .core.proof import resolve_did_key
+from .core.resolver import HistoryVerifier
 from .core.state import DocumentState
 from .domain_path import DomainPath
 
@@ -18,7 +22,45 @@ def _check_document_id_format(doc_id: str, scid: str):
         raise ValueError("SCID must be the first component of the method-specific ID")
 
 
-def verify_proofs(state: DocumentState, prev_state: DocumentState, is_final: bool):
+class WebvhVerifier(HistoryVerifier):
+    """`HistoryVerifier` for the webvh method."""
+
+    def __init__(self, verify_proofs: bool = True):
+        """Constructor."""
+        self._verify_proofs = verify_proofs
+
+    def verify_state(
+        self, state: DocumentState, prev_state: DocumentState | None, is_final: bool
+    ) -> Awaitable[None] | None:
+        """Verify a new document state."""
+        _check_document_id_format(state.document_id, state.params["scid"])
+        _verify_params(state, prev_state)
+
+        if (
+            self._verify_proofs
+            and state.version_number == 1
+            or state.is_authz_event
+            or is_final
+        ):
+            return get_running_loop().run_in_executor(
+                None, _verify_proofs, state, prev_state
+            )
+
+
+def _verify_params(state: DocumentState, prev_state: DocumentState):
+    """Verify the correct parameters on a document state."""
+    if (
+        prev_state
+        and prev_state.document_id != state.document_id
+        and not prev_state.params.get("portable", False)
+    ):
+        raise ValueError("Document ID updated on non-portable DID")
+    method = state.params.get("method")
+    if method != f"did:{METHOD_NAME}:{METHOD_VERSION}":
+        raise ValueError(f"Unexpected value for method parameter: {method}")
+
+
+def _verify_proofs(state: DocumentState, prev_state: DocumentState):
     """Verify all proofs on a document state."""
     proofs = state.proofs
     if not proofs:
@@ -36,25 +78,3 @@ def verify_proofs(state: DocumentState, prev_state: DocumentState, is_final: boo
             proof=proof,
             method=vmethod,
         )
-
-
-def verify_params(state: DocumentState, prev_state: DocumentState, is_final: bool):
-    """Verify the correct parameters on a document state."""
-    _check_document_id_format(state.document_id, state.params["scid"])
-    if (
-        prev_state
-        and prev_state.document_id != state.document_id
-        and not prev_state.params.get("portable", False)
-    ):
-        raise ValueError("Document ID updated on non-portable DID")
-    method = state.params.get("method")
-    if method != f"did:{METHOD_NAME}:{METHOD_VERSION}":
-        raise ValueError(f"Unexpected value for method parameter: {method}")
-
-
-def verify_all(state: DocumentState, prev_state: DocumentState, is_final: bool):
-    """Verify the proofs and parameters on a document state."""
-    # FIXME add resolution context instead of is_final flag?
-    verify_params(state, prev_state, is_final)
-    if state.version_number == 1 or state.is_authz_event or is_final:
-        verify_proofs(state, prev_state, is_final)

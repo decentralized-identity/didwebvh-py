@@ -4,7 +4,7 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
 import jsoncanon
 
@@ -52,15 +52,15 @@ class DocumentState:
     version_number: int
     last_version_id: str
     proofs: list[dict] = field(default_factory=list)
-    last_key_hashes: Optional[list[str]] = None
+    last_key_hashes: list[str] | None = None
 
     @classmethod
     def initial(
         cls,
         params: dict,
-        document: Union[str, dict],
-        timestamp: Optional[Union[str, datetime]] = None,
-        hash_name: Optional[str] = None,
+        document: str | dict,
+        timestamp: str | datetime | None = None,
+        hash_name: str | None = None,
     ):
         """Create a new initial state for a DID (version 1)."""
         timestamp, timestamp_raw = make_timestamp(timestamp)
@@ -106,7 +106,7 @@ class DocumentState:
 
         return genesis
 
-    def _generate_entry_hash(self, hash_info: Optional[HashInfo] = None) -> str:
+    def _generate_entry_hash(self, hash_info: HashInfo | None = None) -> str:
         if not hash_info:
             hash_info = self._get_hash_info()
         line = self.history_line()
@@ -166,9 +166,9 @@ class DocumentState:
 
     def create_next(
         self,
-        document: Optional[dict] = None,
-        params_update: Optional[dict] = None,
-        timestamp: Union[str, datetime, None] = None,
+        document: dict | str | None = None,
+        params_update: dict | None = None,
+        timestamp: str | datetime | None = None,
     ) -> "DocumentState":
         """Generate a successor document state from this state."""
         params = self.params.copy()
@@ -177,7 +177,10 @@ class DocumentState:
         else:
             params_update = {}
         timestamp, timestamp_raw = make_timestamp(timestamp)
-        document = deepcopy(self.document if document is None else document)
+        if isinstance(document, str):
+            document = json.loads(document)
+        else:
+            document = deepcopy(self.document if document is None else document)
         ret = DocumentState(
             params=params,
             params_update=params_update,
@@ -195,7 +198,7 @@ class DocumentState:
 
     @classmethod
     def load_history_line(
-        cls, parts: list[str], prev_state: Optional["DocumentState"]
+        cls, parts: dict, prev_state: Optional["DocumentState"] | None
     ) -> "DocumentState":
         """Load a deserialized history line into a document state."""
         version_id: str
@@ -386,7 +389,7 @@ class DocumentState:
         return next_keys or []
 
     @property
-    def witness_rule(self) -> Optional[WitnessRule]:
+    def witness_rule(self) -> WitnessRule | None:
         """Fetch the active `witness` rules from the parameters."""
         rule = self.params.get("witness")
         if rule is not None:
@@ -397,8 +400,8 @@ class DocumentState:
         self,
         sk: SigningKey,
         *,
-        timestamp: Optional[datetime] = None,
-        kid: Optional[str] = None,
+        timestamp: datetime | None = None,
+        kid: str | None = None,
     ) -> dict:
         """Generate a proof for a document state with a signing key."""
         return di_jcs_sign(

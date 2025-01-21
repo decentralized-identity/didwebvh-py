@@ -3,15 +3,37 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-import aiofiles
-
-from .const import HISTORY_FILENAME
-from .core.loader import load_history
+from .const import HISTORY_FILENAME, METHOD_NAME, WITNESS_FILENAME
+from .core.did_url import DIDUrl
+from .core.file_utils import AsyncTextGenerator, read_url
+from .core.resolver import DidResolver, HistoryResolver, LocalHistoryResolver
 from .core.state import DocumentMetadata, DocumentState
 from .core.types import SigningKey
-from .verify import verify_all, verify_params
+from .domain_path import DomainPath
+from .verify import WebvhVerifier
+
+
+def did_base_url(didurl: DIDUrl) -> str:
+    """Determine the URL of the DID history file from a did:webvh DID URL."""
+    if didurl.method != METHOD_NAME:
+        raise ValueError("Invalid DID")
+    pathinfo = DomainPath.parse_identifier(didurl.identifier)
+    host = pathinfo.domain_port
+    path = pathinfo.path or (".well-known",)
+    return "/".join((f"https://{host}", *path, ""))
+
+
+class WebvhHistoryResolver(HistoryResolver):
+    """Webvh history resolver."""
+
+    def resolve_entry_log(self, document_id: str) -> AsyncTextGenerator:
+        """Resolve the entry log file for a DID."""
+        return read_url(did_base_url(document_id) + HISTORY_FILENAME)
+
+    def resolve_witness_log(self, document_id: str) -> AsyncTextGenerator:
+        """Resolve the witness log file for a DID."""
+        return read_url(did_base_url(document_id) + WITNESS_FILENAME)
 
 
 def write_document_state(
@@ -34,29 +56,38 @@ def write_document_state(
         )
 
 
-async def load_history_path(
+def did_history_resolver(
+    *,
+    local_history: Path | None = None,
+) -> HistoryResolver:
+    """Create a DID history resolver."""
+    if local_history:
+        if not local_history.is_file():
+            raise ValueError(f"History path not found: {local_history}")
+        witness_path = local_history.parent.joinpath(WITNESS_FILENAME)
+        if not witness_path.is_file():
+            witness_path = None
+        return LocalHistoryResolver(local_history, witness_path)
+    else:
+        return WebvhHistoryResolver()
+
+
+async def load_local_history(
     path: str | Path,
     *,
-    version_id: Optional[int] = None,
-    version_time: Optional[datetime] = None,
     verify_proofs: bool = True,
 ) -> tuple[DocumentState, DocumentMetadata]:
     """Load a history log file into a final document state and metadata."""
-    verify_state = verify_all if verify_proofs else verify_params
-    async with aiofiles.open(path) as history:
-        return await load_history(
-            history,
-            version_id=version_id,
-            version_time=version_time,
-            verify_state=verify_state,
-        )
+    source = did_history_resolver(local_history=path)
+    verifier = WebvhVerifier(verify_proofs=verify_proofs)
+    return await DidResolver(verifier).resolve_state(None, source)
 
 
 def update_document_state(
     prev_state: DocumentState,
     update_key: SigningKey,
-    document: Optional[dict] = None,
-    params_update: Optional[dict] = None,
+    document: dict | None = None,
+    params_update: dict | None = None,
     timestamp: str | datetime | None = None,
 ) -> DocumentState:
     """Update a document state, including a new signed proof."""

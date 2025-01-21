@@ -1,24 +1,43 @@
+import json
 from copy import deepcopy
-from unittest import mock
 
 import pytest
 
+from did_webvh.core.file_utils import AsyncTextGenerator, AsyncTextReadError, read_str
 from did_webvh.core.resolver import (
     DereferencingResult,
+    DidResolver,
+    HistoryResolver,
+    HistoryVerifier,
     ResolutionResult,
     dereference_fragment,
     normalize_services,
     reference_map,
-    resolve_history,
 )
 
-mock_history_iterator = mock.AsyncMock()
-mock_history_iterator.__aiter__.return_value = iter(
-    [
-        '["1-QmToCZBHUFeYhChZrn65Ww5UhdzaBriYaCLcUmBh1DC52h", "2024-09-09T18:57:28Z", {"updateKeys": ["z6Mkk9dFo3jzVKFsNACaaGqZmgBBxktGKuid3QXWsrJFkq4c"], "method": "did:webvh:0.4", "scid": "QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4"}, {"value": {"@context": ["https://www.w3.org/ns/did/v1"], "id": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000"}}, [{"type": "DataIntegrityProof", "cryptosuite": "eddsa-jcs-2022", "verificationMethod": "did:key:z6Mkk9dFo3jzVKFsNACaaGqZmgBBxktGKuid3QXWsrJFkq4c#z6Mkk9dFo3jzVKFsNACaaGqZmgBBxktGKuid3QXWsrJFkq4c", "created": "2024-09-09T18:57:28Z", "proofPurpose": "authentication", "challenge": "1-QmToCZBHUFeYhChZrn65Ww5UhdzaBriYaCLcUmBh1DC52h", "proofValue": "z2UrBUD3xGUUnhCcH51sgRsFDtZjsx4X2xTuToRAfyrZ2ShdUGeeLxrYEHWBBCKB6HmU1hsK57Qi8CP9ND85Z5PK4"}]]',
-        '["2-QmUuhGnfMoW8P5JCMWUJi4Ns3WkHsStj2ZEhzpMU7PV8QK", "2024-09-09T18:57:29Z", {}, {"patch": [{"op": "add", "path": "/authentication", "value": ["did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs"]}, {"op": "add", "path": "/service", "value": [{"id": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#domain", "type": "LinkedDomains", "serviceEndpoint": "https://example.com%3A5000"}, {"id": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#whois", "type": "LinkedVerifiablePresentation", "serviceEndpoint": "https://example.com%3A5000/.well-known/whois.vc"}]}, {"op": "add", "path": "/verificationMethod", "value": [{"id": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs", "controller": "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000", "type": "Multikey", "publicKeyMultibase": "z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs"}]}, {"op": "add", "path": "/assertionMethod", "value": ["did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs"]}, {"op": "add", "path": "/@context/1", "value": "https://w3id.org/security/multikey/v1"}, {"op": "add", "path": "/@context/2", "value": "https://identity.foundation/.well-known/did-configuration/v1"}, {"op": "add", "path": "/@context/3", "value": "https://identity.foundation/linked-vp/contexts/v1"}]}, [{"type": "DataIntegrityProof", "cryptosuite": "eddsa-jcs-2022", "verificationMethod": "did:key:z6Mkk9dFo3jzVKFsNACaaGqZmgBBxktGKuid3QXWsrJFkq4c#z6Mkk9dFo3jzVKFsNACaaGqZmgBBxktGKuid3QXWsrJFkq4c", "created": "2024-09-09T18:57:29Z", "proofPurpose": "authentication", "challenge": "2-QmUuhGnfMoW8P5JCMWUJi4Ns3WkHsStj2ZEhzpMU7PV8QK", "proofValue": "z2wPpginNzhQgb2ztGjHMfEba7tcMkuAkGYzV8qpGoQaVmtno4Z8AmSZhMP4ry9dnN7LMS6kWQcR23yx3yHL1eafY"}]]',
-    ]
-)
+
+class MockHistoryResolver(HistoryResolver):
+    def __init__(
+        self,
+        entry_log: str,
+        witness_log: str | None = None,
+    ):
+        """Constructor."""
+        self.entry_log = entry_log
+        self.witness_log = witness_log
+
+    def resolve_entry_log(self, _document_id: str) -> AsyncTextGenerator:
+        """Resolve the entry log file for a DID."""
+        return read_str(self.entry_log)
+
+    def resolve_witness_log(self, _document_id: str) -> AsyncTextGenerator:
+        """Resolve the witness log file for a DID."""
+        return read_str(self.witness_log or "")
+
+
+class MockHistoryVerifier(HistoryVerifier):
+    pass
+
 
 mock_document = {
     "@context": [
@@ -57,11 +76,64 @@ mock_document = {
 }
 
 
+# async def test_generate_history():
+#     from did_webvh.core.state import DocumentState
+
+#     state1 = DocumentState.initial({"method": "testmethod"}, '{"id": "docid-{SCID}"}')
+#     state2 = state1.create_next(None)
+#     history = [state1.history_line(), state2.history_line()]
+#     print(history)
+
+
 async def test_resolve_history():
-    result = await resolve_history(
-        "QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4", mock_history_iterator
+    HISTORY = [
+        {
+            "versionId": "1-QmV2AdEkGSvn3K5v7x73rFVMrhVxAUbDdPRhx2fmVRFpdE",
+            "versionTime": "2025-01-20T23:46:33Z",
+            "parameters": {
+                "method": "testmethod",
+                "scid": "QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH",
+            },
+            "state": {"id": "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH"},
+            "proof": [],
+        },
+        {
+            "versionId": "2-QmaofgPQBFQBEX9dFjsYsJXTgmMhZoEXwfNegVZ38rQ7YX",
+            "versionTime": "2025-01-20T23:46:33Z",
+            "parameters": {},
+            "state": {"id": "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH"},
+            "proof": [],
+        },
+    ]
+    history = MockHistoryResolver("\n".join(map(json.dumps, HISTORY)))
+    resolver = DidResolver(MockHistoryVerifier())
+    res = await resolver.resolve(
+        "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH", history
     )
-    assert isinstance(result, ResolutionResult)
+    assert isinstance(res, ResolutionResult)
+    assert isinstance(res.document, dict)
+    assert res.document_metadata["versionNumber"] == 2
+
+    res = await resolver.resolve("bad-docid", history)
+    assert res.document is None
+    assert res.resolution_metadata == {
+        "error": "invalidDid",
+        "errorMessage": "Document @id mismatch",
+        "contentType": "application/did+ld+json",
+    }
+
+
+async def test_resolve_history_failed_request():
+    class BadResolver(HistoryResolver):
+        def resolve_entry_log(self, _document_id: str) -> AsyncTextGenerator:
+            """Resolve the entry log file for a DID."""
+            raise AsyncTextReadError("resolution error")
+
+    resolver = DidResolver(MockHistoryVerifier())
+    res = await resolver.resolve("docid", BadResolver())
+    assert isinstance(res, ResolutionResult)
+    assert res.document is None
+    assert res.resolution_metadata["error"] is not None
 
 
 def test_reference_map():

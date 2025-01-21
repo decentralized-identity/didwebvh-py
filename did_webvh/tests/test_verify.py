@@ -168,7 +168,7 @@ def test_check_document_id_format():
 
 
 def test_verify_proofs(mock_document_state, mock_next_sk):
-    verify_proofs(mock_document_state, None, is_final=False)
+    verify_proofs(mock_document_state, None)
 
     pk2 = mock_next_sk.multikey
     prev_state = mock_document_state
@@ -204,7 +204,7 @@ def test_verify_proofs(mock_document_state, mock_next_sk):
         ],
     )
 
-    verify_proofs(state=current_state, prev_state=prev_state, is_final=False)
+    verify_proofs(state=current_state, prev_state=prev_state)
 
     # Bad proof for current state
     current_state.proofs = [
@@ -218,4 +218,4 @@ def test_verify_proofs(mock_document_state, mock_next_sk):
         }
     ]
     with pytest.raises(ValueError):
-        verify_proofs(state=current_state, prev_state=prev_state, is_final=False)
+        verify_proofs(state=current_state, prev_state=prev_state)
