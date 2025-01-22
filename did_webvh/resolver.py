@@ -160,7 +160,6 @@ async def resolve(didurl: str, *, local_history: Path | None = None) -> dict:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="resolve a did:webvh DID URL")
     parser.add_argument("-f", "--file", help="the path to a local DID history file")
-    parser.add_argument("--accept", help="specify the MIME type(s) to accept")
     parser.add_argument("didurl", help="the DID URL to resolve")
     args = parser.parse_args()
 

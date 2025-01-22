@@ -31,7 +31,7 @@ async def auto_update_did(
     with open(doc_path) as docf:
         document = json.load(docf)
     history_path = doc_dir.joinpath(HISTORY_FILENAME)
-    prev_state, _ = await load_local_history(history_path, verify_proofs=False)
+    prev_state, _ = await load_local_history(history_path)
     store = await aries_askar.Store.open(
         f"sqlite://{doc_dir}/{ASKAR_STORE_FILENAME}", pass_key=pass_key
     )

@@ -73,7 +73,6 @@ class WitnessChecks:
 
     def verify(self, validated: dict) -> bool:
         """Verify the set of checks against the result of witness proof validation."""
-        print(validated)
         for rule, ver_id in self.rules.items():
             ver_num = _check_version_id(ver_id)
             total = 0
@@ -88,7 +87,6 @@ class WitnessChecks:
                             total += entry.weight
                             break
             if total < rule.threshold:
-                print("missed threshold:", rule.threshold, total)
                 return False
         return True
 

@@ -80,12 +80,15 @@ def did_history_resolver(
 async def load_local_history(
     path: str | Path,
     *,
-    verify_proofs: bool = True,
+    verify_proofs: bool = False,
+    verify_witness: bool = False,
 ) -> tuple[DocumentState, DocumentMetadata]:
     """Load a history log file into a final document state and metadata."""
     source = did_history_resolver(local_history=path)
     verifier = WebvhVerifier(verify_proofs=verify_proofs)
-    return await DidResolver(verifier).resolve_state(None, source, check_witness=False)
+    return await DidResolver(verifier).resolve_state(
+        None, source, verify_witness=verify_witness
+    )
 
 
 def update_document_state(

@@ -84,7 +84,7 @@ async def auto_provision_did(
     write_document_state(doc_dir, state)
 
     # verify log
-    await load_local_history(doc_dir.joinpath(HISTORY_FILENAME))
+    await load_local_history(doc_dir.joinpath(HISTORY_FILENAME), verify_proofs=True)
 
     return (doc_dir, state, update_key)
 

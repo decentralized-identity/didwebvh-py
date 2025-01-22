@@ -209,9 +209,9 @@ class DidResolver:
         document_id: str | None,
         source: HistoryResolver,
         *,
-        check_witness: bool = True,
         version_id: int | None = None,
         version_time: datetime | None = None,
+        verify_witness: bool = True,
     ) -> tuple[DocumentState, DocumentMetadata]:
         """Resolve a specific document state and document metadata."""
         created = None
@@ -291,7 +291,7 @@ class DidResolver:
                 version_ids.append(state.version_id)
 
                 if (
-                    check_witness
+                    verify_witness
                     and (witness_rule := state.witness_rule)
                     and witness_rule not in witness_checks
                 ):
@@ -303,6 +303,9 @@ class DidResolver:
                     break
 
         if not found:
+            if aborted_err:
+                # cannot resolve latest state
+                raise aborted_err
             if version_id:
                 raise ValueError(f"Cannot resolve `versionId`: {version_id}")
             found = state
