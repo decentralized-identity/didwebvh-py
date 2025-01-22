@@ -1,7 +1,7 @@
 """Support for DID resolution."""
 
 import json
-from asyncio import ensure_future, gather
+from asyncio import ensure_future, gather, get_running_loop
 from collections.abc import Awaitable
 from copy import deepcopy
 from dataclasses import dataclass
@@ -10,15 +10,14 @@ from inspect import isawaitable
 from pathlib import Path
 from typing import Optional
 
-# from multidict import MultiDict
 from .date_utils import make_timestamp
 from .file_utils import (
     AsyncTextGenerator,
     AsyncTextReadError,
     read_text_file,
 )
-from .state import DocumentMetadata, DocumentState
-from .witness import CheckedWitness
+from .state import DocumentMetadata, DocumentState, verify_state_proofs
+from .witness import WitnessChecks, verify_witness_proofs
 
 
 class ResolutionError(Exception):
@@ -122,13 +121,30 @@ class LocalHistoryResolver(HistoryResolver):
 class HistoryVerifier:
     """Generic DID verifier class."""
 
-    def verify_state(
-        self, state: DocumentState, prev_state: DocumentState | None, final: bool
-    ) -> Awaitable[None] | None:
-        """Verify a new document state."""
+    def __init__(self, verify_proofs: bool = True):
+        """Constructor."""
+        self._verify_proofs = verify_proofs
 
-    def verify_witness(self, witness: dict) -> Awaitable[CheckedWitness | None] | None:
-        """Verify a document witness."""
+    def verify_state(
+        self, state: DocumentState, prev_state: DocumentState | None, is_final: bool
+    ) -> Awaitable[None] | None:
+        """Verify a document state."""
+        if (
+            prev_state
+            and prev_state.document_id != state.document_id
+            and not prev_state.params.get("portable", False)
+        ):
+            raise ValueError("Document ID updated on non-portable DID")
+
+        if (
+            self._verify_proofs
+            and state.version_number == 1
+            or state.is_authz_event
+            or is_final
+        ):
+            return get_running_loop().run_in_executor(
+                None, verify_state_proofs, state, prev_state
+            )
 
 
 class DidResolver:
@@ -193,6 +209,7 @@ class DidResolver:
         document_id: str | None,
         source: HistoryResolver,
         *,
+        check_witness: bool = True,
         version_id: int | None = None,
         version_time: datetime | None = None,
     ) -> tuple[DocumentState, DocumentMetadata]:
@@ -274,8 +291,10 @@ class DidResolver:
                 version_ids.append(state.version_id)
 
                 if (
-                    witness_rule := state.witness_rule
-                ) and witness_rule not in witness_checks:
+                    check_witness
+                    and (witness_rule := state.witness_rule)
+                    and witness_rule not in witness_checks
+                ):
                     witness_checks[witness_rule] = state.version_id
 
                 if not created:
@@ -288,32 +307,18 @@ class DidResolver:
                 raise ValueError(f"Cannot resolve `versionId`: {version_id}")
             found = state
 
-        if version_checks:
-            all_checks = gather(*version_checks)
-            # FIXME check witnesses in parallel
-            await all_checks
+        tasks = version_checks
 
-        # if witness_checks:
-        #     witness_errors = []
-        #     witness_verify = MultiDict()
-        #     async with source.resolve_witness_log(document_id) as witness_log:
-        #         witness_text = await witness_log.text()
-        #         try:
-        #             witness_data = json.loads(witness_text)
-        #         except ValueError as e:
-        #             raise ValueError(f"Invalid witness JSON: {e}") from None
-        #         if not isinstance(witness_data, list):
-        #             raise ValueError("Invalid witness JSON: expected list")
-        #         for entry in witness_data:
-        #             if isinstance(entry, dict):
-        #                 try:
-        #                     check = await self.verifier.verify_witness(entry)
-        #                 except ValueError as err:
-        #                     witness_errors.append(err)
-        #                     continue
-        #                 if check:
-        #                     witness_verify.add(check.witness_id, check.version_id)
-        #     # FIXME verify rules
+        if witness_checks:
+            witness_checks = WitnessChecks(rules=witness_checks, versions=version_ids)
+            tasks.append(
+                ensure_future(
+                    self.verify_witness_log(document_id, source, witness_checks)
+                )
+            )
+
+        if tasks:
+            await gather(*tasks)
 
         doc_meta = DocumentMetadata(
             created=created,
@@ -323,6 +328,22 @@ class DidResolver:
             version_number=state.version_number,
         )
         return state, doc_meta
+
+    async def verify_witness_log(
+        self, document_id: str | None, source: HistoryResolver, checks: WitnessChecks
+    ):
+        """Retrieve and verify the witness log."""
+        async with source.resolve_witness_log(document_id) as witness_log:
+            witness_text = await witness_log.text()
+        try:
+            proofs = json.loads(witness_text)
+        except ValueError as e:
+            raise ValueError(f"Invalid witness JSON: {e}") from None
+        if not isinstance(proofs, list):
+            raise ValueError("Invalid witness JSON: expected list")
+        (validated, _errs) = await verify_witness_proofs(proofs)
+        if not checks.verify(validated):
+            raise ValueError("Witness verification failed")
 
 
 def _add_ref(doc_id: str, node: dict, refmap: dict, all: set):

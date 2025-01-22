@@ -110,7 +110,7 @@ class AsyncTextReader:
                 try:
                     chunk = await anext(self._input)
                     if not self._decoder:
-                        self._decoder = _LineDecoder("", encoding=self._encoding)
+                        self._decoder = _LineDecoder(encoding=self._encoding)
                     self._decoder.append_bytes(chunk)
                 except StopAsyncIteration:
                     self._input = None
@@ -125,7 +125,7 @@ class AsyncTextReader:
             try:
                 chunk = await anext(self._input)
                 if not self._decoder:
-                    self._decoder = _LineDecoder(self._init, encoding=self._encoding)
+                    self._decoder = _LineDecoder(encoding=self._encoding)
                 self._decoder.append_bytes(chunk)
             except StopAsyncIteration:
                 self._input = None

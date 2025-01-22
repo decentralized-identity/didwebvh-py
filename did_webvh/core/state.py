@@ -11,7 +11,7 @@ import jsoncanon
 from .date_utils import iso_format_datetime, make_timestamp
 from .did_url import SCID_PLACEHOLDER
 from .hash_utils import DEFAULT_HASH, HashInfo
-from .proof import di_jcs_sign, di_jcs_verify
+from .proof import di_jcs_sign, di_jcs_verify, resolve_did_key
 from .types import SigningKey, VerifyingKey
 from .witness import WitnessRule
 
@@ -479,6 +479,26 @@ class DocumentState:
         if "method" not in res or "scid" not in res:
             raise ValueError("Invalid initial parameters")
         return res
+
+
+def verify_state_proofs(state: DocumentState, prev_state: DocumentState):
+    """Verify all proofs on a document state."""
+    proofs = state.proofs
+    if not proofs:
+        raise ValueError("Missing history version proof(s)")
+    if not prev_state or prev_state.next_key_hashes:
+        update_keys = state.update_keys
+    else:
+        update_keys = prev_state.update_keys
+    for proof in proofs:
+        method_id = proof.get("verificationMethod")
+        vmethod = resolve_did_key(method_id)
+        if vmethod["publicKeyMultibase"] not in update_keys:
+            raise ValueError(f"Update key not found: {method_id}")
+        state.verify_proof(
+            proof=proof,
+            method=vmethod,
+        )
 
 
 def _canonicalize_log_line(line: dict) -> bytes:

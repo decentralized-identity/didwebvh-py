@@ -62,12 +62,17 @@ def did_history_resolver(
 ) -> HistoryResolver:
     """Create a DID history resolver."""
     if local_history:
-        if not local_history.is_file():
+        if local_history.is_dir():
+            entry_path = local_history.joinpath(HISTORY_FILENAME)
+            witness_path = local_history.joinpath(WITNESS_FILENAME)
+        elif local_history.is_file():
+            entry_path = local_history
+            witness_path = local_history.parent.joinpath(WITNESS_FILENAME)
+        else:
             raise ValueError(f"History path not found: {local_history}")
-        witness_path = local_history.parent.joinpath(WITNESS_FILENAME)
         if not witness_path.is_file():
             witness_path = None
-        return LocalHistoryResolver(local_history, witness_path)
+        return LocalHistoryResolver(entry_path, witness_path)
     else:
         return WebvhHistoryResolver()
 
@@ -80,7 +85,7 @@ async def load_local_history(
     """Load a history log file into a final document state and metadata."""
     source = did_history_resolver(local_history=path)
     verifier = WebvhVerifier(verify_proofs=verify_proofs)
-    return await DidResolver(verifier).resolve_state(None, source)
+    return await DidResolver(verifier).resolve_state(None, source, check_witness=False)
 
 
 def update_document_state(

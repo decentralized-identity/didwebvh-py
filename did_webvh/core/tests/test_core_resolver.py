@@ -36,7 +36,8 @@ class MockHistoryResolver(HistoryResolver):
 
 
 class MockHistoryVerifier(HistoryVerifier):
-    pass
+    def __init__(self):
+        super().__init__(verify_proofs=False)
 
 
 mock_document = {
@@ -74,7 +75,6 @@ mock_document = {
         "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com%3A5000#z6MktKzAfqQr4EurmuyBaB3xq1PJFYe7nrgw6FXWRDkquSAs"
     ],
 }
-
 
 # async def test_generate_history():
 #     from did_webvh.core.state import DocumentState

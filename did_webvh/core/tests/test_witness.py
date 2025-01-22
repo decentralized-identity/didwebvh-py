@@ -1,15 +1,22 @@
 from did_webvh.askar import AskarSigningKey
 from did_webvh.core.proof import di_jcs_sign
-from did_webvh.core.witness import verify_witness_proofs
+from did_webvh.core.witness import (
+    WitnessChecks,
+    WitnessEntry,
+    WitnessRule,
+    verify_witness_proofs,
+)
 
 
-def test_witness_filter():
+async def test_verify_witnesses():
     sk1 = AskarSigningKey.generate("ed25519")
     pk1 = sk1.multikey
-    sk1.kid = f"did:key:{pk1}#{pk1}"
+    id1 = f"did:key:{pk1}"
+    sk1.kid = f"{id1}#{pk1}"
     sk2 = AskarSigningKey.generate("ed25519")
     pk2 = sk2.multikey
-    sk2.kid = f"did:key:{pk2}#{pk2}"
+    id2 = f"did:key:{pk2}"
+    sk2.kid = f"{id2}#{pk2}"
 
     data = [
         {"versionId": "1-..."},
@@ -34,5 +41,31 @@ def test_witness_filter():
         ),
     ]
 
-    filtered = verify_witness_proofs(data)
-    assert filtered == {"1-...": {pk1}, "4-...": {pk1, pk2}}
+    (filtered, errors) = await verify_witness_proofs(data)
+    assert filtered == {
+        id1: {1: "1-...", 4: "4-..."},
+        id2: {4: "4-..."},
+    }
+    assert errors == []
+
+    checks = WitnessChecks(
+        rules={
+            WitnessRule(
+                threshold=1,
+                witnesses=(WitnessEntry(id1, 1),),
+            ): "4-..."
+        },
+        versions=["1-...", "2-...", "3-...", "4-..."],
+    )
+    assert checks.verify(filtered)
+
+    checks = WitnessChecks(
+        rules={
+            WitnessRule(
+                threshold=2,
+                witnesses=(WitnessEntry(id1, 1),),
+            ): "4-..."
+        },
+        versions=["1-...", "2-...", "3-...", "4-..."],
+    )
+    assert not checks.verify(filtered)

@@ -1,6 +1,6 @@
 """Core witnessing definitions."""
 
-import contextlib
+from asyncio import gather, get_running_loop
 from dataclasses import dataclass
 
 from .proof import di_jcs_verify, resolve_did_key
@@ -62,44 +62,91 @@ class WitnessRule:
         witnesses = (WitnessEntry.deserialize(w) for w in witnesses)
         return WitnessRule(threshold, witnesses)
 
-    # def verify(self)
+
+@dataclass
+class WitnessChecks:
+    """Required checks for a document resolution."""
+
+    # a mapping from the rule instance to the latest versionId where it occurs
+    rules: dict[WitnessRule, str]
+    versions: list[str]
+
+    def verify(self, validated: dict) -> bool:
+        """Verify the set of checks against the result of witness proof validation."""
+        print(validated)
+        for rule, ver_id in self.rules.items():
+            ver_num = _check_version_id(ver_id)
+            total = 0
+            for entry in rule.witnesses:
+                if entry.id in validated:
+                    for check_num, check_ver in validated[entry.id].items():
+                        if (
+                            check_num >= ver_num
+                            and check_num <= len(self.versions)
+                            and self.versions[check_num - 1] == check_ver
+                        ):
+                            total += entry.weight
+                            break
+            if total < rule.threshold:
+                print("missed threshold:", rule.threshold, total)
+                return False
+        return True
 
 
-@dataclass(frozen=True, slots=True)
-class CheckedWitness:
-    """The result of a successful witness verification."""
-
-    witness_id: str
-    version_id: str
-
-
-def verify_witness_proofs(proofs: list[dict]) -> dict[str, set[str]]:
+async def verify_witness_proofs(proofs: list[dict]) -> tuple[dict, list]:
     """Verify a list of witness proofs.
 
     Returns: a mapping from `versionId` to a list of `verificationMethod` IDs.
     """
-    res = {}
+    verified = {}
+    errors = []
+    tasks = []
     for proof_entry in proofs:
         if not isinstance(proof_entry, dict):
             raise ValueError("Invalid witness proof, expected dict")
-        ver_id = proof_entry.get("versionId")
-        if not isinstance(ver_id, str) or not ver_id:
-            raise ValueError("Invalid witness proof, missing or invalid 'versionId'")
         if proof := proof_entry.get("proof"):
             if isinstance(proof, dict):
                 proof = [proof]
             if isinstance(proof, list):
-                valid = set()
                 for proof_dict in proof:
                     if isinstance(proof_dict, dict):
-                        method_id = proof_dict.get("verificationMethod")
-                        with contextlib.suppress(ValueError):
-                            vmethod = resolve_did_key(method_id)
-                            di_jcs_verify(proof_entry, proof_dict, vmethod)
-                            valid.add(vmethod["publicKeyMultibase"])
-                if valid:
-                    if ver_id in res:
-                        res[ver_id].update(valid)
-                    else:
-                        res[ver_id] = valid
-    return res
+                        tasks.append(
+                            get_running_loop().run_in_executor(
+                                None,
+                                _verify_witness_proof,
+                                proof_entry,
+                                proof_dict,
+                                verified,
+                                errors,
+                            )
+                        )
+    if tasks:
+        await gather(*tasks)
+    return (verified, errors)
+
+
+def _check_version_id(ver_id) -> int:
+    if not isinstance(ver_id, str) or not ver_id:
+        return 0
+    parts = ver_id.split("-", 1)
+    if len(parts) < 2:
+        return 0
+    if not parts[0].isdecimal():
+        return 0
+    return int(parts[0])
+
+
+def _verify_witness_proof(container: dict, proof: dict, verified: dict, errors: list):
+    method_id = proof.get("verificationMethod")
+    try:
+        ver_id = container.get("versionId")
+        if not (ver_num := _check_version_id(ver_id)):
+            raise ValueError("Invalid witness proof, missing or invalid 'versionId'")
+        vmethod = resolve_did_key(method_id)
+        di_jcs_verify(container, proof, vmethod)
+        ident = "did:key:" + vmethod["publicKeyMultibase"]
+        if ident not in verified:
+            verified[ident] = {}
+        verified[ident][ver_num] = ver_id
+    except ValueError as err:
+        errors.append(err)

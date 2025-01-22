@@ -86,8 +86,7 @@ async def _rotate_key(
 
 
 def _format_did_key(key: VerifyingKey) -> str:
-    pk = key.multikey
-    return f"did:key:{pk}#{pk}"
+    return f"did:key:{key.multikey}"
 
 
 async def demo(
@@ -183,7 +182,7 @@ async def demo(
             for w in witness_keys[:2]  # signing with 2/3 keys
         ]
         with open(doc_dir.joinpath(WITNESS_FILENAME), "w") as out:
-            out.write(json.dumps(proof_data, indent=2))
+            out.write(json.dumps([proof_data], indent=2))
             out.write("\n")
         print(f"Wrote {WITNESS_FILENAME}")
 

@@ -1,5 +1,3 @@
-from datetime import datetime
-
 import pytest
 
 from did_webvh.askar import AskarSigningKey
@@ -8,13 +6,6 @@ from did_webvh.core.proof import (
     di_jcs_verify,
 )
 from did_webvh.core.state import DocumentState
-
-
-@pytest.fixture()
-def mock_sk() -> AskarSigningKey:
-    return AskarSigningKey.from_jwk(
-        '{"crv":"Ed25519","kty":"OKP","x":"iWIGdqmPSeg8Ov89VzUrKuLD7pJ8_askEwJGE1R5Zqk","d":"RJDq2-dY85mW1bbDMcrXPObeL-Ud-b8MrPO-iqxajv0"}'
-    )
 
 
 def test_jcs_sign():
