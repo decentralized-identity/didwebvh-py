@@ -14,8 +14,10 @@ from .domain_path import DomainPath
 from .verify import WebvhVerifier
 
 
-def did_base_url(didurl: DIDUrl, files: bool = False) -> str:
+def did_base_url(didurl: DIDUrl | str, files: bool = False) -> str:
     """Determine the URL of the DID history file from a did:webvh DID URL."""
+    if not isinstance(didurl, DIDUrl):
+        didurl = DIDUrl.decode(didurl)
     if didurl.method != METHOD_NAME:
         raise ValueError("Invalid DID")
     pathinfo = DomainPath.parse_identifier(didurl.identifier)
