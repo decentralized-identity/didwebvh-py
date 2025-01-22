@@ -37,7 +37,7 @@ def extend_document_services(document: dict, base_url: str):
             {
                 # FIXME will need to add @context if not provided already
                 "id": doc_id + "#files",
-                "type": "PathResolution",
+                "type": "relativeRef",
                 "serviceEndpoint": base_url,
             }
         )
