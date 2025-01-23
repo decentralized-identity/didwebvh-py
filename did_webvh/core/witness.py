@@ -29,8 +29,8 @@ class WitnessEntry:
                 raise ValueError(f"Unexpected key '{k}' in 'witnesses' value")
         if not isinstance(ident, str) or not ident:
             raise ValueError("Expected string for witness identifier")
-        if not isinstance(weight, int) or weight <= 0:
-            raise ValueError("Expected positive integer for witness weight")
+        if not isinstance(weight, int) or weight < 0:
+            raise ValueError("Expected non-negative integer for witness weight")
         return WitnessEntry(ident, weight)
 
 
@@ -55,8 +55,10 @@ class WitnessRule:
                 witnesses = v
             else:
                 raise ValueError(f"Unexpected key '{k}' in 'witness' value")
-        if not isinstance(threshold, int):
-            raise ValueError("Expected integer for 'threshold' in 'witness' value")
+        if not isinstance(threshold, int) or threshold < 0:
+            raise ValueError(
+                "Expected non-negative integer for 'threshold' in 'witness' value"
+            )
         if not isinstance(witnesses, list):
             raise ValueError("Expected list for 'witnesses' in 'witness' value")
         witnesses = (WitnessEntry.deserialize(w) for w in witnesses)

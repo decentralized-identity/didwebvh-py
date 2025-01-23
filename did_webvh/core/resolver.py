@@ -293,6 +293,7 @@ class DidResolver:
                 if (
                     verify_witness
                     and (witness_rule := state.witness_rule)
+                    and witness_rule.threshold != 0
                     and witness_rule not in witness_checks
                 ):
                     witness_checks[witness_rule] = state.version_id

@@ -23,6 +23,11 @@ AsyncTextGenerator: TypeAlias = AsyncGenerator["AsyncTextReader", None]
 class AsyncTextReadError(Exception):
     """An exception raised by an async text reader."""
 
+    def __init__(self, *args, **extra):
+        """Constructor."""
+        super().__init__(*args)
+        self.extra = extra
+
 
 @asynccontextmanager
 async def read_str(value: str | StringIO) -> AsyncTextGenerator:
