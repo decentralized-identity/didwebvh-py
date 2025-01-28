@@ -39,7 +39,7 @@ python3 -m did_webvh.resolver "did:webvh:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iK
 ```
 
 ```sh
-python3 -m did_webvh.resolver "did:webvh:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example/whois.vc"
+python3 -m did_webvh.resolver "did:webvh:QmRwq46VkGuCEx4dyYxxexmig7Fwbqbm9AB73iKUAHjMZH:domain.example/whois.vp"
 ```
 
 For testing, this script also accepts the path to the local DID history file:

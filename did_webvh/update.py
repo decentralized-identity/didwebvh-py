@@ -9,10 +9,11 @@ from typing import Union
 
 import aries_askar
 
-from .const import ASKAR_STORE_FILENAME, HISTORY_FILENAME
+from .askar import AskarSigningKey
+from .const import ASKAR_STORE_FILENAME, DOCUMENT_FILENAME, HISTORY_FILENAME
 from .core.state import DocumentState
-from .history import load_history_path
-from .proof import AskarSigningKey, SigningKey, di_jcs_sign
+from .core.types import SigningKey
+from .history import load_local_history
 
 
 async def auto_update_did(
@@ -24,13 +25,13 @@ async def auto_update_did(
     timestamp: Union[datetime, str] = None,
 ) -> DocumentState:
     """Automatically update a history log."""
-    doc_path = doc_dir.joinpath("did.json")
+    doc_path = doc_dir.joinpath(DOCUMENT_FILENAME)
     if not doc_path.is_file():
-        raise ValueError("Document file (did.json) not found")
+        raise ValueError(f"Document file ({DOCUMENT_FILENAME}) not found")
     with open(doc_path) as docf:
         document = json.load(docf)
     history_path = doc_dir.joinpath(HISTORY_FILENAME)
-    prev_state, _ = await load_history_path(history_path, verify_proofs=False)
+    prev_state, _ = await load_local_history(history_path)
     store = await aries_askar.Store.open(
         f"sqlite://{doc_dir}/{ASKAR_STORE_FILENAME}", pass_key=pass_key
     )
@@ -75,7 +76,7 @@ async def update_did(
     ):
         raise ValueError("There are no document or parameter updates to apply")
     # FIXME check that the signing key is present in the updateKeys
-    state.proofs.append(di_jcs_sign(state, sk, timestamp=state.timestamp))
+    state.proofs.append(state.create_proof(sk, timestamp=state.timestamp))
     with open(history_path, "a") as out:
         print(
             json.dumps(state.history_line()),
@@ -113,7 +114,7 @@ if __name__ == "__main__":
     except ValueError as err:
         raise SystemExit(f"Update failed: {err}") from None
 
-    doc_path = doc_dir.joinpath("did.json")
+    doc_path = doc_dir.joinpath(DOCUMENT_FILENAME)
     with open(doc_path, "w") as out:
         print(
             json.dumps(state.document, indent=2),

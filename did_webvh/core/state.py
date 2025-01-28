@@ -2,17 +2,20 @@
 
 import json
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
 import jsoncanon
 
 from .date_utils import iso_format_datetime, make_timestamp
 from .did_url import SCID_PLACEHOLDER
 from .hash_utils import DEFAULT_HASH, HashInfo
+from .proof import di_jcs_sign, di_jcs_verify, resolve_did_key
+from .types import SigningKey, VerifyingKey
+from .witness import WitnessRule
 
-AUTH_PARAMS = {"prerotation", "nextKeyHashes", "updateKeys"}
+AUTHZ_PARAMS = {"nextKeyHashes", "updateKeys"}
 
 
 @dataclass
@@ -48,15 +51,16 @@ class DocumentState:
     version_id: str
     version_number: int
     last_version_id: str
-    proofs: list[dict]
+    proofs: list[dict] = field(default_factory=list)
+    last_key_hashes: list[str] | None = None
 
     @classmethod
     def initial(
         cls,
         params: dict,
-        document: Union[str, dict],
-        timestamp: Optional[Union[str, datetime]] = None,
-        hash_name: Optional[str] = None,
+        document: str | dict,
+        timestamp: str | datetime | None = None,
+        hash_name: str | None = None,
     ):
         """Create a new initial state for a DID (version 1)."""
         timestamp, timestamp_raw = make_timestamp(timestamp)
@@ -83,7 +87,6 @@ class DocumentState:
             timestamp_raw=timestamp_raw,
             version_id="",
             version_number=0,
-            proofs=[],
         )
         hash_info = HashInfo.from_name(hash_name or DEFAULT_HASH)
         scid = genesis._generate_entry_hash(hash_info)
@@ -103,7 +106,7 @@ class DocumentState:
 
         return genesis
 
-    def _generate_entry_hash(self, hash_info: Optional[HashInfo] = None) -> str:
+    def _generate_entry_hash(self, hash_info: HashInfo | None = None) -> str:
         if not hash_info:
             hash_info = self._get_hash_info()
         line = self.history_line()
@@ -163,9 +166,9 @@ class DocumentState:
 
     def create_next(
         self,
-        document: Optional[dict] = None,
-        params_update: Optional[dict] = None,
-        timestamp: Union[str, datetime, None] = None,
+        document: dict | str | None = None,
+        params_update: dict | None = None,
+        timestamp: str | datetime | None = None,
     ) -> "DocumentState":
         """Generate a successor document state from this state."""
         params = self.params.copy()
@@ -174,17 +177,20 @@ class DocumentState:
         else:
             params_update = {}
         timestamp, timestamp_raw = make_timestamp(timestamp)
-        document = deepcopy(self.document if document is None else document)
+        if isinstance(document, str):
+            document = json.loads(document)
+        else:
+            document = deepcopy(self.document if document is None else document)
         ret = DocumentState(
             params=params,
             params_update=params_update,
             document=document,
             timestamp=timestamp,
             timestamp_raw=timestamp_raw,
-            last_version_id=self.version_id,
             version_id="",
             version_number=self.version_number + 1,
-            proofs=[],
+            last_version_id=self.version_id,
+            last_key_hashes=self.next_key_hashes,
         )
         entry_hash = ret._generate_entry_hash()
         ret.version_id = f"{ret.version_number}-{entry_hash}"
@@ -192,7 +198,7 @@ class DocumentState:
 
     @classmethod
     def load_history_line(
-        cls, parts: list[str], prev_state: Optional["DocumentState"]
+        cls, parts: dict, prev_state: Optional["DocumentState"] | None
     ) -> "DocumentState":
         """Load a deserialized history line into a document state."""
         version_id: str
@@ -252,19 +258,14 @@ class DocumentState:
 
         old_params = prev_state.params if prev_state else {}
         params = cls._update_params(old_params, params_update)
-        if old_params.get("prerotation") and "updateKeys" in params_update:
-            # new update keys must match old hashes
-            check_hashes = set(old_params.get("nextKeyHashes") or [])
-            new_keys = params.get("updateKeys") or []
-            hash_info = prev_state._get_hash_info()
-            expect_hashes = set(
-                hash_info.formatted_hash(new_key.encode("utf-8")) for new_key in new_keys
-            )
-            if expect_hashes != check_hashes:
+        last_key_hashes = prev_state.next_key_hashes if prev_state else None
+        if last_key_hashes:
+            new_keys = params_update.get("updateKeys")
+            if new_keys is None:
                 raise ValueError(
-                    "New value for 'updateKeys' does not correspond "
-                    "with 'nextKeyHashes' parameter"
+                    "'updateKeys' must be provided when 'nextKeyHashes' is previously set"
                 )
+            cls._validate_key_rotation(last_key_hashes, new_keys)
 
         last_version_id = prev_state.version_id if prev_state else params["scid"]
 
@@ -283,10 +284,41 @@ class DocumentState:
             document=document,
             proofs=proofs,
             last_version_id=last_version_id,
+            last_key_hashes=last_key_hashes,
         )
         if not prev_state:
             state._check_scid_derivation()
         return state
+
+    @classmethod
+    def _validate_key_rotation(cls, key_hashes: list[str], update_keys: list[str]):
+        if not isinstance(key_hashes, list) or not all(
+            isinstance(k, str) for k in key_hashes
+        ):
+            raise ValueError(
+                "Invalid value for 'nextKeyHashes', expected list of strings"
+            )
+        if not isinstance(update_keys, list) or not all(
+            isinstance(k, str) for k in update_keys
+        ):
+            raise ValueError("Invalid value for 'updateKeys', expected list of strings")
+
+        # new update keys must be found in old hashes
+        check_hashes = {}
+        for h in key_hashes:
+            check_hashes[h] = HashInfo.identify_hash(h)
+        for new_key in update_keys:
+            found = False
+            for key_hash, hash_info in check_hashes.items():
+                check_hash = hash_info.formatted_hash(new_key.encode("utf-8"))
+                if check_hash == key_hash:
+                    found = True
+                    break
+            if not found:
+                raise ValueError(
+                    f"Encoded key '{new_key}' in 'updateKeys' is not found in previous "
+                    "'nextKeyHashes' parameter"
+                )
 
     def history_line(self) -> dict:
         """Generate the serialized history line for this document state."""
@@ -325,14 +357,9 @@ class DocumentState:
         return ctls
 
     @property
-    def is_auth_event(self) -> bool:
+    def is_authz_event(self) -> bool:
         """Determine if this document state constitutes an authorization event."""
-        return not AUTH_PARAMS.isdisjoint(self.params_update.keys())
-
-    @property
-    def prerotation(self) -> bool:
-        """Determine whether key prerotation is enabled for this document state."""
-        return self.params.get("prerotation", False)
+        return not AUTHZ_PARAMS.isdisjoint(self.params_update.keys())
 
     @property
     def scid(self) -> str:
@@ -360,6 +387,34 @@ class DocumentState:
         ):
             raise ValueError("Invalid 'nextKeyHashes' parameter")
         return next_keys or []
+
+    @property
+    def witness_rule(self) -> WitnessRule | None:
+        """Fetch the active `witness` rules from the parameters."""
+        rule = self.params.get("witness")
+        if rule is not None:
+            rule = WitnessRule.deserialize(rule)
+        return rule
+
+    def create_proof(
+        self,
+        sk: SigningKey,
+        *,
+        timestamp: datetime | None = None,
+        kid: str | None = None,
+    ) -> dict:
+        """Generate a proof for a document state with a signing key."""
+        return di_jcs_sign(
+            self.history_line(),
+            sk,
+            purpose="authentication",
+            timestamp=timestamp,
+            kid=kid,
+        )
+
+    def verify_proof(self, proof: dict, method: VerifyingKey | dict):
+        """Verify a proof against a document state."""
+        return di_jcs_verify(self.history_line(), proof, method)
 
     @classmethod
     def _update_params(cls, old_params: dict, new_params: dict) -> dict:
@@ -390,13 +445,6 @@ class DocumentState:
                     raise ValueError(
                         "Parameter 'portable' may only be enabled in the first entry"
                     )
-            elif param == "prerotation":
-                if pvalue not in (True, False):
-                    raise ValueError(
-                        f"Unsupported value for 'prerotation' parameter: {pvalue!r}"
-                    )
-                if old_params.get("prerotation") and not pvalue:
-                    raise ValueError("Parameter 'prerotation' cannot be changed to False")
             elif param == "scid":
                 if old_params:
                     raise ValueError("Parameter 'scid' cannot be updated")
@@ -415,6 +463,10 @@ class DocumentState:
                     raise ValueError(
                         f"Unsupported value for 'updateKeys' parameter: {pvalue!r}"
                     )
+            elif param == "witness":
+                if pvalue is not None:
+                    # will throw a ValueError if invalid
+                    WitnessRule.deserialize(pvalue)
             else:
                 raise ValueError(f"Unsupported history parameter: {param!r}")
 
@@ -427,6 +479,26 @@ class DocumentState:
         if "method" not in res or "scid" not in res:
             raise ValueError("Invalid initial parameters")
         return res
+
+
+def verify_state_proofs(state: DocumentState, prev_state: DocumentState):
+    """Verify all proofs on a document state."""
+    proofs = state.proofs
+    if not proofs:
+        raise ValueError("Missing history version proof(s)")
+    if not prev_state or prev_state.next_key_hashes:
+        update_keys = state.update_keys
+    else:
+        update_keys = prev_state.update_keys
+    for proof in proofs:
+        method_id = proof.get("verificationMethod")
+        vmethod = resolve_did_key(method_id)
+        if vmethod["publicKeyMultibase"] not in update_keys:
+            raise ValueError(f"Update key not found: {method_id}")
+        state.verify_proof(
+            proof=proof,
+            method=vmethod,
+        )
 
 
 def _canonicalize_log_line(line: dict) -> bytes:

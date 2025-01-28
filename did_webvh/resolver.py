@@ -4,47 +4,31 @@ import argparse
 import asyncio
 import json
 import urllib.parse
-from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
 
-import aiofiles
-import aiohttp
-
-from .const import HISTORY_FILENAME, METHOD_NAME
 from .core.did_url import DIDUrl
+from .core.file_utils import AsyncTextReadError, read_url
 from .core.resolver import (
     DereferencingResult,
+    DidResolver,
     ResolutionError,
     ResolutionResult,
     dereference_fragment,
     normalize_services,
     reference_map,
-    resolve_history,
 )
-from .domain_path import DomainPath
-from .proof import verify_all
+from .history import did_base_url, did_history_resolver
+from .verify import WebvhVerifier
 
 
-def did_history_url(didurl: DIDUrl) -> str:
-    """Determine the URL of the DID history file from a did:webvh DID URL."""
-    if didurl.method != METHOD_NAME:
-        raise ValueError("Invalid DID")
-    pathinfo = DomainPath.parse_identifier(didurl.identifier)
-    host = pathinfo.domain_port
-    path = pathinfo.path or (".well-known",)
-    return "/".join((f"https://{host}", *path, HISTORY_FILENAME))
-
-
-def extend_document_services(document: dict, access_url: str):
+def extend_document_services(document: dict, base_url: str):
     """Add the implicit services to a DID document, where not defined."""
     document["service"] = normalize_services(document)
-    pos = access_url.rfind("/")
+    pos = base_url.rfind("/")
     if pos <= 0:
-        raise ValueError(f"Invalid access URL: {access_url}")
-    base_url = access_url[: pos + 1]
+        raise ValueError(f"Invalid base URL: {base_url}")
+    base_url = base_url[: pos + 1]
     ref_map = reference_map(document)
     doc_id = document["id"]
 
@@ -53,7 +37,7 @@ def extend_document_services(document: dict, access_url: str):
             {
                 # FIXME will need to add @context if not provided already
                 "id": doc_id + "#files",
-                "type": "PathResolution",
+                "type": "relativeRef",
                 "serviceEndpoint": base_url,
             }
         )
@@ -64,12 +48,12 @@ def extend_document_services(document: dict, access_url: str):
                 "@context": "https://identity.foundation/linked-vp/contexts/v1",
                 "id": doc_id + "#whois",
                 "type": "LinkedVerifiablePresentation",
-                "serviceEndpoint": base_url + "whois.vc",
+                "serviceEndpoint": base_url + "whois.vp",
             }
         )
 
 
-def _find_service(document: dict, name: str) -> Optional[dict]:
+def _find_service(document: dict, name: str) -> dict | None:
     if name.startswith("#"):
         name = document["id"] + name
     ref_map = reference_map(document)
@@ -77,41 +61,27 @@ def _find_service(document: dict, name: str) -> Optional[dict]:
 
 
 async def resolve_did(
-    did: Union[DIDUrl, str],
+    did: DIDUrl | str,
     *,
-    local_history: Optional[Path] = None,
-    version_id: Union[int, str, None] = None,
-    version_time: Union[datetime, str, None] = None,
+    local_history: Path | None = None,
+    version_id: int | str | None = None,
+    version_time: datetime | str | None = None,
     add_implicit: bool = True,
-    resolve_url: Optional[Callable[[str], Awaitable[AsyncIterator[str]]]] = None,
 ) -> ResolutionResult:
     """Resolve a did:webvh DID or DID URL.
 
     Resolution parameters within a DID URL are not applied.
     """
     didurl = DIDUrl.decode(did) if isinstance(did, str) else did
-    url = did_history_url(didurl)
-    if local_history:
-        fetch_history = aiofiles.open(local_history)
-    else:
-        fetch_history = (resolve_url or _resolve_url)(url)
-    try:
-        async with fetch_history as content:
-            result = await resolve_history(
-                didurl.did,
-                content,
-                version_id=version_id,
-                version_time=version_time,
-                verify_state=verify_all,
-            )
-    except ValueError as err:
-        return ResolutionResult(
-            resolution_metadata=ResolutionError(
-                "notFound", f"Error fetching DID history: {str(err)}"
-            ).serialize()
-        )
+    source = did_history_resolver(local_history=local_history)
+    result = await DidResolver(WebvhVerifier()).resolve(
+        didurl.did,
+        source,
+        version_id=version_id,
+        version_time=version_time,
+    )
     if result.document and add_implicit:
-        extend_document_services(result.document, url)
+        extend_document_services(result.document, did_base_url(didurl, files=True))
     return result
 
 
@@ -133,30 +103,27 @@ async def _resolve_relative_ref(
                 "notFound", "Unable to resolve relative path"
             ).serialize()
         )
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url) as req:
-                req.raise_for_status()
-                # FIXME binary content?
-                content = await req.text()
-                return DereferencingResult(
-                    content=content,
-                    # FIXME add content type
-                    content_metadata={},
-                    dereferencing_metadata={},
-                )
-        except aiohttp.ClientError as err:
+    try:
+        async with read_url(url) as req:
+            content = await req.text()
             return DereferencingResult(
-                dereferencing_metadata=ResolutionError(
-                    "notFound", f"Error fetching relative path: {str(err)}"
-                ).serialize()
+                content=content,
+                # FIXME add content type
+                content_metadata={},
+                dereferencing_metadata={},
             )
+    except AsyncTextReadError as err:
+        return DereferencingResult(
+            dereferencing_metadata=ResolutionError(
+                "notFound", f"Error fetching relative path: {str(err)}"
+            ).serialize()
+        )
 
 
-async def resolve(didurl: str, *, local_history: Optional[Path] = None) -> dict:
+async def resolve(didurl: str, *, local_history: Path | None = None) -> dict:
     """Resolve a did:webvh DID URL, applying any included DID resolution parameters."""
     try:
-        didurl = DIDUrl.decode(args.didurl)
+        didurl = DIDUrl.decode(didurl)
     except ValueError as err:
         return ResolutionResult(
             resolution_metadata=ResolutionError("invalidDid", str(err)).serialize()
@@ -190,23 +157,14 @@ async def resolve(didurl: str, *, local_history: Optional[Path] = None) -> dict:
     return result.serialize()
 
 
-@asynccontextmanager
-async def _resolve_url(url: str) -> AsyncIterator[str]:
-    try:
-        async with aiohttp.ClientSession() as session, session.get(url) as req:
-            req.raise_for_status()
-            yield req.content
-    except aiohttp.ClientError as err:
-        raise ValueError(str(err)) from None
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="resolve a did:webvh DID URL")
     parser.add_argument("-f", "--file", help="the path to a local DID history file")
-    parser.add_argument("--accept", help="specify the MIME type(s) to accept")
     parser.add_argument("didurl", help="the DID URL to resolve")
     args = parser.parse_args()
 
-    result = asyncio.run(resolve(args.didurl, local_history=args.file))
+    result = asyncio.run(
+        resolve(args.didurl, local_history=Path(args.file) if args.file else None)
+    )
 
     print(json.dumps(result, indent=2))

@@ -14,16 +14,19 @@ from typing import Optional, Union
 import aries_askar
 import jsoncanon
 
-from .const import ASKAR_STORE_FILENAME, HISTORY_FILENAME, METHOD_NAME, METHOD_VERSION
+from .askar import AskarSigningKey
+from .const import (
+    ASKAR_STORE_FILENAME,
+    DOCUMENT_FILENAME,
+    HISTORY_FILENAME,
+    METHOD_NAME,
+    METHOD_VERSION,
+)
 from .core.hash_utils import DEFAULT_HASH, HashInfo
+from .core.proof import VerifyingKey
 from .core.state import DocumentState
 from .domain_path import DomainPath
-from .history import load_history_path, write_document_state
-from .proof import (
-    AskarSigningKey,
-    VerifyingKey,
-    di_jcs_sign,
-)
+from .history import load_local_history, write_document_state
 
 DID_CONTEXT = "https://www.w3.org/ns/did/v1"
 DOMAIN_PATTERN = re.compile(r"^([a-zA-Z0-9%_\-]+\.)+[a-zA-Z0-9%_\.\-]{2,}$")
@@ -34,8 +37,10 @@ async def auto_provision_did(
     key_alg: str,
     pass_key: str,
     *,
-    extra_params: Optional[dict] = None,
-    hash_name: Optional[str] = None,
+    prerotation: bool = False,
+    extra_params: dict | None = None,
+    hash_name: str | None = None,
+    target_dir: str | Path | None = None,
 ) -> tuple[Path, DocumentState, AskarSigningKey]:
     """Automatically provision a new did:webvh DID.
 
@@ -47,7 +52,7 @@ async def auto_provision_did(
     genesis = genesis_document(placeholder_id)
     params = deepcopy(extra_params) if extra_params else {}
     params["updateKeys"] = [update_key.multikey]
-    if params.get("prerotation"):
+    if prerotation:
         next_key = AskarSigningKey.generate(key_alg)
         hash_info = HashInfo.from_name(hash_name or DEFAULT_HASH)
         next_key_hash = hash_info.formatted_hash(next_key.multikey.encode("utf-8"))
@@ -56,8 +61,8 @@ async def auto_provision_did(
         next_key = None
         next_key_hash = None
     state = provision_did(genesis, params=params, hash_name=hash_name)
-    doc_dir = Path(f"{pathinfo.domain}_{state.scid}")
-    doc_dir.mkdir(exist_ok=False)
+    doc_dir = Path(target_dir) if target_dir else Path(f"{pathinfo.domain}_{state.scid}")
+    doc_dir.mkdir(exist_ok=bool(target_dir))
 
     store = await aries_askar.Store.provision(
         f"sqlite://{doc_dir}/{ASKAR_STORE_FILENAME}", pass_key=pass_key
@@ -71,8 +76,7 @@ async def auto_provision_did(
     await store.close()
 
     state.proofs.append(
-        di_jcs_sign(
-            state,
+        state.create_proof(
             update_key,
             timestamp=state.timestamp,
         )
@@ -80,7 +84,7 @@ async def auto_provision_did(
     write_document_state(doc_dir, state)
 
     # verify log
-    await load_history_path(doc_dir.joinpath(HISTORY_FILENAME))
+    await load_local_history(doc_dir.joinpath(HISTORY_FILENAME), verify_proofs=True)
 
     return (doc_dir, state, update_key)
 
@@ -175,7 +179,7 @@ if __name__ == "__main__":
     except ValueError as err:
         raise SystemExit(f"Provisioning failed: {err}") from None
 
-    doc_path = doc_dir.joinpath("did.json")
+    doc_path = doc_dir.joinpath(DOCUMENT_FILENAME)
     with open(doc_path, "w") as out:
         print(
             json.dumps(state.document, indent=2),

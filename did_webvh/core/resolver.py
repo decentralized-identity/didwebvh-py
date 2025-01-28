@@ -1,14 +1,23 @@
 """Support for DID resolution."""
 
 import json
-from collections.abc import AsyncIterator
+from asyncio import ensure_future, gather, get_running_loop
+from collections.abc import Awaitable
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Union
+from inspect import isawaitable
+from pathlib import Path
+from typing import Optional
 
 from .date_utils import make_timestamp
-from .loader import VerifyState, load_history
+from .file_utils import (
+    AsyncTextGenerator,
+    AsyncTextReadError,
+    read_text_file,
+)
+from .state import DocumentMetadata, DocumentState, verify_state_proofs
+from .witness import WitnessChecks, verify_witness_proofs
 
 
 class ResolutionError(Exception):
@@ -74,48 +83,271 @@ class DereferencingResult:
         }
 
 
-async def resolve_history(
-    document_id: str,
-    history: AsyncIterator[str],
-    verify_state: VerifyState = None,
-    *,
-    version_id: Union[int, str] = None,
-    version_time: Union[datetime, str] = None,
-) -> ResolutionResult:
-    """Resolve a `ResolutionResult` from an async log iterator.
+class HistoryResolver:
+    """Generic history resolver base class."""
 
-    Params:
-        document_id: the DID to be resolved
-        history: an async string iterator over ordered log lines
-        version_id: stop parsing at the requested versionId
-        version_time: stop parsing at the most recent entry before
-            or exactly matching the requested versionTime
-        verify_state: verification to perform on each intermediate state
-    """
-    if isinstance(version_id, str):
-        # FIXME handle conversion error
-        version_id = int(str)
-    if isinstance(version_time, str):
-        # FIXME handle conversion error
-        version_time = make_timestamp(version_time)[0]
-    try:
-        state, meta = await load_history(
-            history,
-            version_id=version_id,
-            version_time=version_time,
-            verify_state=verify_state,
+    def resolve_entry_log(self, document_id: str | None) -> AsyncTextGenerator:
+        """Resolve the entry log file for a DID."""
+        raise NotImplementedError()
+
+    def resolve_witness_log(self, document_id: str | None) -> AsyncTextGenerator:
+        """Resolve the witness log file for a DID."""
+        raise NotImplementedError()
+
+
+class LocalHistoryResolver(HistoryResolver):
+    """A history resolver which loads local log files."""
+
+    def __init__(
+        self,
+        entry_path: str | Path,
+        witness_path: str | Path | None = None,
+    ):
+        """Constructor."""
+        self.entry_path = Path(entry_path)
+        self.witness_path = Path(witness_path) if witness_path else None
+
+    def resolve_entry_log(self, _document_id: str | None) -> AsyncTextGenerator:
+        """Resolve the entry log file for a DID."""
+        return read_text_file(self.entry_path)
+
+    def resolve_witness_log(self, _document_id: str | None) -> AsyncTextGenerator:
+        """Resolve the witness log file for a DID."""
+        if self.witness_path:
+            return read_text_file(self.witness_path)
+        raise AsyncTextReadError("Missing witness log path")
+
+
+class HistoryVerifier:
+    """Generic DID verifier class."""
+
+    def __init__(self, verify_proofs: bool = True):
+        """Constructor."""
+        self._verify_proofs = verify_proofs
+
+    def verify_state(
+        self, state: DocumentState, prev_state: DocumentState | None, is_final: bool
+    ) -> Awaitable[None] | None:
+        """Verify a document state."""
+        if (
+            prev_state
+            and prev_state.document_id != state.document_id
+            and not prev_state.params.get("portable", False)
+        ):
+            raise ValueError("Document ID updated on non-portable DID")
+
+        if (
+            self._verify_proofs
+            and state.version_number == 1
+            or state.is_authz_event
+            or is_final
+        ):
+            return get_running_loop().run_in_executor(
+                None, verify_state_proofs, state, prev_state
+            )
+
+
+class DidResolver:
+    """Generic DID resolver class, which accepts a custom log resolver and verifier."""
+
+    def __init__(self, verifier: HistoryVerifier):
+        """Constructor."""
+        self.verifier = verifier
+
+    async def resolve(
+        self,
+        document_id: str,
+        source: HistoryResolver,
+        *,
+        version_id: int | str | None = None,
+        version_time: datetime | str | None = None,
+    ) -> ResolutionResult:
+        """Resolve a `ResolutionResult` from a document ID and history resolver.
+
+        Params:
+            document_id: the DID to be resolved
+            source: the `HistoryResolver` instance to use
+            version_id: stop parsing at the requested versionId
+            version_time: stop parsing at the most recent entry before
+                or exactly matching the requested versionTime
+        """
+        if isinstance(version_id, str):
+            # FIXME handle conversion error
+            version_id = int(str)
+        if isinstance(version_time, str):
+            # FIXME handle conversion error
+            version_time = make_timestamp(version_time)[0]
+        try:
+            (state, doc_meta) = await self.resolve_state(
+                document_id, source, version_id=version_id, version_time=version_time
+            )
+        except AsyncTextReadError as err:
+            return ResolutionResult(
+                resolution_metadata=ResolutionError(
+                    "notFound", f"History resolution error: {str(err)}"
+                ).serialize()
+            )
+        except ValueError as err:
+            return ResolutionResult(
+                resolution_metadata=ResolutionError("invalidDid", str(err)).serialize()
+            )
+
+        if state.document_id != document_id:
+            res_result = ResolutionResult(
+                resolution_metadata=ResolutionError(
+                    "invalidDid", "Document @id mismatch"
+                ).serialize()
+            )
+        else:
+            res_result = ResolutionResult(
+                document=state.document, document_metadata=doc_meta.serialize()
+            )
+        return res_result
+
+    async def resolve_state(
+        self,
+        document_id: str | None,
+        source: HistoryResolver,
+        *,
+        version_id: int | None = None,
+        version_time: datetime | None = None,
+        verify_witness: bool = True,
+    ) -> tuple[DocumentState, DocumentMetadata]:
+        """Resolve a specific document state and document metadata."""
+        created = None
+        prev_state = None
+        state = None
+        next_state = None
+        aborted_err = None
+        found = None
+        line_no = 0
+        version_checks = []
+        version_ids = []
+        witness_checks = {}
+
+        async with source.resolve_entry_log(document_id) as entry_log:
+            while not aborted_err:
+                prev_state = state
+                state = next_state
+                next_state = None
+
+                try:
+                    line = await anext(entry_log)
+                    line_no += 1
+                    try:
+                        parts = json.loads(line)
+                    except ValueError as e:
+                        raise ValueError(
+                            f"Invalid history JSON on line {line_no}: {e}"
+                        ) from None
+
+                    # may raise ValueError
+                    next_state = DocumentState.load_history_line(parts, state)
+                    next_state.check_version_id()
+                except StopAsyncIteration:
+                    pass
+                except ValueError as e:
+                    aborted_err = e
+                    next_state = None
+
+                if found:
+                    # no extra verification needed
+                    continue
+
+                if not state:
+                    if not next_state:
+                        if aborted_err:
+                            raise aborted_err
+                        raise ValueError("Empty document history")
+                    if version_time and next_state.timestamp > version_time:
+                        raise ValueError(f"Cannot resolve versionTime: {version_time}")
+                    continue
+
+                if version_id:
+                    if state.version_id == version_id:
+                        if version_time and state.timestamp > version_time:
+                            raise ValueError(
+                                "Specified `versionId` not valid at specified"
+                                " `versionTime`"
+                            )
+                        found = state
+                elif version_time and (
+                    (next_state and next_state.timestamp > version_time)
+                    or (not next_state and not aborted_err)
+                ):
+                    if state.timestamp > version_time:
+                        raise ValueError(
+                            "Resolved version not valid at specified `versionTime`"
+                        )
+                    found = state
+
+                try:
+                    verify = self.verifier.verify_state(state, prev_state, bool(found))
+                except ValueError as err:
+                    verify = err
+                if isawaitable(verify):
+                    verify = ensure_future(_check_proof(verify, state.version_id))
+                    version_checks.append(verify)
+                version_ids.append(state.version_id)
+
+                if (
+                    verify_witness
+                    and (witness_rule := state.witness_rule)
+                    and witness_rule.threshold != 0
+                    and witness_rule not in witness_checks
+                ):
+                    witness_checks[witness_rule] = state.version_id
+
+                if not created:
+                    created = state.timestamp
+                if not next_state:
+                    break
+
+        if not found:
+            if aborted_err:
+                # cannot resolve latest state
+                raise aborted_err
+            if version_id:
+                raise ValueError(f"Cannot resolve `versionId`: {version_id}")
+            found = state
+
+        tasks = version_checks
+
+        if witness_checks:
+            witness_checks = WitnessChecks(rules=witness_checks, versions=version_ids)
+            tasks.append(
+                ensure_future(
+                    self.verify_witness_log(document_id, source, witness_checks)
+                )
+            )
+
+        if tasks:
+            await gather(*tasks)
+
+        doc_meta = DocumentMetadata(
+            created=created,
+            updated=state.timestamp,
+            deactivated=state.deactivated,
+            version_id=state.version_id,
+            version_number=state.version_number,
         )
-    except ValueError as err:
-        return ResolutionResult(
-            resolution_metadata=ResolutionError("invalidDid", str(err)).serialize()
-        )
-    if state.document_id != document_id:
-        return ResolutionResult(
-            resolution_metadata=ResolutionError(
-                "invalidDid", "Document @id mismatch"
-            ).serialize()
-        )
-    return ResolutionResult(document=state.document, document_metadata=meta.serialize())
+        return state, doc_meta
+
+    async def verify_witness_log(
+        self, document_id: str | None, source: HistoryResolver, checks: WitnessChecks
+    ):
+        """Retrieve and verify the witness log."""
+        async with source.resolve_witness_log(document_id) as witness_log:
+            witness_text = await witness_log.text()
+        try:
+            proofs = json.loads(witness_text)
+        except ValueError as e:
+            raise ValueError(f"Invalid witness JSON: {e}") from None
+        if not isinstance(proofs, list):
+            raise ValueError("Invalid witness JSON: expected list")
+        (validated, _errs) = await verify_witness_proofs(proofs)
+        if not checks.verify(validated):
+            raise ValueError("Witness verification failed")
 
 
 def _add_ref(doc_id: str, node: dict, refmap: dict, all: set):
@@ -130,6 +362,13 @@ def _add_ref(doc_id: str, node: dict, refmap: dict, all: set):
         raise ValueError(f"Duplicate reference: {reft}")
     all.add(reft)
     refmap[reft] = node
+
+
+async def _check_proof(verify: Awaitable[None], version_id: str):
+    try:
+        await verify
+    except ValueError as err:
+        raise ValueError(f"Error verifying proof for versionId '{version_id}'") from err
 
 
 def reference_map(document: dict) -> dict[str, dict]:
