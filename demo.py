@@ -282,6 +282,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "domain_path",
+        nargs="?",
         help="the domain name and optional path components",
         default="domain.example",
     )
