@@ -1,6 +1,29 @@
 {
   "@context": [
-    "https://www.w3.org/ns/did/v1"
+    "https://www.w3.org/ns/did/v1",
+    "https://w3id.org/security/multikey/v1",
+    "https://identity.foundation/.well-known/did-configuration/v1"
   ],
-  "id": "did:tdw:QmaJp6pmb6RUk4oaDyWQcjeqYbvxsc3kvmHWPpz7B5JwDU:domain.example"
+  "id": "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example",
+  "authentication": [
+    "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example#z6MkjU89vLCBmQUW9rdbUCNrSqeNfCTHV5L45kBZN8Ljj1mT"
+  ],
+  "assertionMethod": [
+    "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example#z6MkjU89vLCBmQUW9rdbUCNrSqeNfCTHV5L45kBZN8Ljj1mT"
+  ],
+  "verificationMethod": [
+    {
+      "id": "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example#z6MkjU89vLCBmQUW9rdbUCNrSqeNfCTHV5L45kBZN8Ljj1mT",
+      "controller": "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example",
+      "type": "Multikey",
+      "publicKeyMultibase": "z6MkjU89vLCBmQUW9rdbUCNrSqeNfCTHV5L45kBZN8Ljj1mT"
+    }
+  ],
+  "service": [
+    {
+      "id": "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example#domain",
+      "type": "LinkedDomains",
+      "serviceEndpoint": "https://domain.example"
+    }
+  ]
 }
