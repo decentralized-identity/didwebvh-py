@@ -350,10 +350,7 @@ class DocumentState:
         transformed_document = json.loads(
             json.dumps(document).replace(f'did:webvh:{self.scid}:', 'did:web:')
         )
-        if transformed_document.get('alsoKnownAs'):
-            transformed_document['alsoKnownAs'].append(document.document_id)
-        else:
-            transformed_document['alsoKnownAs'] = [document.document_id]
+        transformed_document['alsoKnownAs'] = [document.document_id]
         return transformed_document
 
     @property
