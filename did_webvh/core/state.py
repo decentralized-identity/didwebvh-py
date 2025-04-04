@@ -344,6 +344,13 @@ class DocumentState:
         """Fetch a copy of the DID document."""
         return deepcopy(self.document)
 
+    def to_did_web(self) -> dict:
+        """Fetch a copy of the DID document with did web transformation."""
+        did_doc = deepcopy(self.document)
+        return json.loads(
+            json.dumps(did_doc).replace(f'did:webvh:{self.scid}:', 'did:web:')
+        )
+
     @property
     def controllers(self) -> list[str]:
         """Fetch a list of the controllers from the DID document."""
