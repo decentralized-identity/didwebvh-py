@@ -346,10 +346,15 @@ class DocumentState:
 
     def to_did_web(self) -> dict:
         """Fetch a copy of the DID document with did web transformation."""
-        did_doc = deepcopy(self.document)
-        return json.loads(
-            json.dumps(did_doc).replace(f'did:webvh:{self.scid}:', 'did:web:')
+        document = deepcopy(self.document)
+        transformed_document = json.loads(
+            json.dumps(document).replace(f'did:webvh:{self.scid}:', 'did:web:')
         )
+        if transformed_document.get('alsoKnownAs'):
+            transformed_document['alsoKnownAs'].append(document.document_id)
+        else:
+            transformed_document['alsoKnownAs'] = [document.document_id]
+        return transformed_document
 
     @property
     def controllers(self) -> list[str]:
