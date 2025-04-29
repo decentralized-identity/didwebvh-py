@@ -419,7 +419,7 @@ class DocumentState:
         return di_jcs_sign(
             self.history_line(),
             sk,
-            purpose="authentication",
+            purpose="assertionMethod",
             timestamp=timestamp,
             kid=kid,
         )
