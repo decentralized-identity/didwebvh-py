@@ -4,24 +4,24 @@
     "https://w3id.org/security/multikey/v1",
     "https://identity.foundation/.well-known/did-configuration/v1"
   ],
-  "id": "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example",
+  "id": "did:webvh:QmQyDxVnosYTzHAMbzYDRZkVrD32ea9Sr2XNs8NkgMB5mn:domain.example",
   "authentication": [
-    "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example#z6MkjU89vLCBmQUW9rdbUCNrSqeNfCTHV5L45kBZN8Ljj1mT"
+    "did:webvh:QmQyDxVnosYTzHAMbzYDRZkVrD32ea9Sr2XNs8NkgMB5mn:domain.example#z6MkjdhTMxysig1P8n3SjnqMCKSR83n3QWqCCioXj12Q3vmk"
   ],
   "assertionMethod": [
-    "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example#z6MkjU89vLCBmQUW9rdbUCNrSqeNfCTHV5L45kBZN8Ljj1mT"
+    "did:webvh:QmQyDxVnosYTzHAMbzYDRZkVrD32ea9Sr2XNs8NkgMB5mn:domain.example#z6MkjdhTMxysig1P8n3SjnqMCKSR83n3QWqCCioXj12Q3vmk"
   ],
   "verificationMethod": [
     {
-      "id": "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example#z6MkjU89vLCBmQUW9rdbUCNrSqeNfCTHV5L45kBZN8Ljj1mT",
-      "controller": "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example",
+      "id": "did:webvh:QmQyDxVnosYTzHAMbzYDRZkVrD32ea9Sr2XNs8NkgMB5mn:domain.example#z6MkjdhTMxysig1P8n3SjnqMCKSR83n3QWqCCioXj12Q3vmk",
+      "controller": "did:webvh:QmQyDxVnosYTzHAMbzYDRZkVrD32ea9Sr2XNs8NkgMB5mn:domain.example",
       "type": "Multikey",
-      "publicKeyMultibase": "z6MkjU89vLCBmQUW9rdbUCNrSqeNfCTHV5L45kBZN8Ljj1mT"
+      "publicKeyMultibase": "z6MkjdhTMxysig1P8n3SjnqMCKSR83n3QWqCCioXj12Q3vmk"
     }
   ],
   "service": [
     {
-      "id": "did:webvh:QmdmPkUdYzbr9txmx8gM2rsHPgr5L6m3gHjJGAf4vUFoGE:domain.example#domain",
+      "id": "did:webvh:QmQyDxVnosYTzHAMbzYDRZkVrD32ea9Sr2XNs8NkgMB5mn:domain.example#domain",
       "type": "LinkedDomains",
       "serviceEndpoint": "https://domain.example"
     }
