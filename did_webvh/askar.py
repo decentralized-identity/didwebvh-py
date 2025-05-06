@@ -96,3 +96,9 @@ class AskarSigningKey(AskarVerifyingKey, SigningKey):
         """Load a signing key from a JWK."""
         k = Key.from_jwk(jwk)
         return AskarSigningKey(k)
+
+    @classmethod
+    def from_secret_bytes(cls, alg: str, secret: bytes) -> "AskarSigningKey":
+        """Load a signing key from decoded secret key bytes."""
+        k = Key.from_secret_bytes(alg, secret)
+        return AskarSigningKey(k)

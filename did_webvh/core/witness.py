@@ -61,22 +61,31 @@ class WitnessRule:
             )
         if not isinstance(witnesses, list):
             raise ValueError("Expected list for 'witnesses' in 'witness' value")
-        witnesses = (WitnessEntry.deserialize(w) for w in witnesses)
+        witnesses = tuple(WitnessEntry.deserialize(w) for w in witnesses)
         return WitnessRule(threshold, witnesses)
 
 
 @dataclass
 class WitnessChecks:
-    """Required checks for a document resolution."""
+    """Required witness checks for a document resolution."""
 
-    # a mapping from the rule instance to the latest versionId where it occurs
-    rules: dict[WitnessRule, str]
+    # a mapping from the rule instance to the earliest versionNumber where it occurs
+    rules: dict[WitnessRule, int]
+    # a list of all version IDs
     versions: list[str]
 
-    def verify(self, validated: dict) -> bool:
+    def verify(self, validated: dict, at_version: int | None = None) -> bool:
         """Verify the set of checks against the result of witness proof validation."""
-        for rule, ver_id in self.rules.items():
-            ver_num = _check_version_id(ver_id)
+        if not self.versions:
+            # must always have at least one version (the genesis)
+            return False
+        latest_rule = None
+        latest_ver = 0
+        for rule, ver_num in self.rules.items():
+            if at_version is not None and ver_num > at_version:
+                continue
+            if ver_num > latest_ver:
+                latest_rule, latest_ver = rule, ver_num
             total = 0
             for entry in rule.witnesses:
                 if entry.id in validated:
@@ -89,6 +98,23 @@ class WitnessChecks:
                             total += entry.weight
                             break
             if total < rule.threshold:
+                return False
+        # latest rule has stricter validation
+        if latest_rule:
+            if not at_version:
+                at_version = len(self.versions)
+            total = 0
+            for entry in latest_rule.witnesses:
+                if entry.id in validated:
+                    for check_num, check_ver in validated[entry.id].items():
+                        if (
+                            check_num >= at_version
+                            and check_num <= len(self.versions)
+                            and self.versions[check_num - 1] == check_ver
+                        ):
+                            total += entry.weight
+                            break
+            if total < latest_rule.threshold:
                 return False
         return True
 
