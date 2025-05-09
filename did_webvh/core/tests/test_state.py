@@ -225,13 +225,6 @@ def test_check_scid_derivation():
     )
     doc_state._check_scid_derivation()
 
-    # version number equals 1
-    doc_state.version_number = 2
-    with pytest.raises(ValueError):
-        doc_state._check_scid_derivation()
-    doc_state.version_number = 1
-    doc_state._check_scid_derivation()
-
     # version id must equal scid
     last_version_id = doc_state.last_version_id
     doc_state.last_version_id = "2-QmUuhGnfMoW8P5JCMWUJi4Ns3WkHsStj2ZEhzpMU7PV8QK"

@@ -11,6 +11,7 @@ import jsoncanon
 from ..const import METHOD_NAME, METHOD_VERSION, SCID_PLACEHOLDER
 from .date_utils import iso_format_datetime, make_timestamp
 from .hash_utils import DEFAULT_HASH, HashInfo
+from .problem_details import ProblemDetails
 from .proof import di_jcs_sign, di_jcs_verify, resolve_did_key
 from .types import SigningKey, VerifyingKey
 from .witness import WitnessRule
@@ -19,16 +20,31 @@ AUTHZ_PARAMS = {"nextKeyHashes", "updateKeys"}
 DEFAULT_METHOD = f"did:{METHOD_NAME}:{METHOD_VERSION}"
 
 
+class InvalidDocumentState(ValueError):
+    """A `ValueError` subclass indicating an invalid document state."""
+
+    problem_details: ProblemDetails
+
+    def __init__(self, problem_details: ProblemDetails):
+        """Initializer."""
+        self.problem_details = problem_details
+        super().__init__(str(problem_details))
+
+
 @dataclass
 class DocumentMetadata:
     """Document resolution metadata."""
 
     created: datetime
     updated: datetime
+    scid: str
     version_id: str
     version_number: int
     version_time: datetime
     deactivated: bool = False
+    portable: bool = False
+    watchers: list | None = None
+    witness: dict | None = None
 
     def serialize(self) -> dict:
         """Serialize this value to a JSON-compatible dictionary."""
@@ -36,9 +52,13 @@ class DocumentMetadata:
             "created": iso_format_datetime(self.created),
             "updated": iso_format_datetime(self.updated),
             "deactivated": self.deactivated,
+            "portable": self.portable,
+            "scid": self.scid,
             "versionId": self.version_id,
             "versionNumber": self.version_number,
             "versionTime": iso_format_datetime(self.version_time),
+            "watchers": self.watchers,
+            "witness": self.witness,
         }
 
 
@@ -76,7 +96,7 @@ class DocumentState:
 
         doc_id = document.get("id")
         if not isinstance(doc_id, str):
-            raise ValueError("Expected string for document id")
+            raise ValueError("Expected string for DID document id")
         if SCID_PLACEHOLDER not in doc_id:
             raise ValueError("SCID placeholder missing from document id")
 
@@ -129,14 +149,22 @@ class DocumentState:
         return HashInfo.identify_hash(entry_hash)
 
     def check_version_id(self):
-        """Verify the versionId of this entry.
+        """Verify the `versionId` of this entry.
 
         Checks that the value is consistent with the version number
         and entry hash.
         """
         entry_hash = self._generate_entry_hash()
         if self.version_id != f"{self.version_number}-{entry_hash}":
-            raise ValueError("Invalid version ID")
+            raise InvalidDocumentState(
+                ProblemDetails(
+                    type="#hash-chain-broken",
+                    title="The cryptographic hash chain was broken.",
+                    detail="Unexpected value for `versionId`.",
+                    versionId=self.version_id,
+                    versionNumber=self.version_number,
+                )
+            )
 
     def generate_next_key_hash(self, multikey: str) -> str:
         """Generate the hash value for an unrevealed multikey.
@@ -146,10 +174,30 @@ class DocumentState:
         hash_info = self._get_hash_info()
         return hash_info.formatted_hash(multikey.encode("utf-8"))
 
+    def _check_genesis_entry(self):
+        if "method" not in self.params:
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_parameter("Missing 'method' parameter")
+            )
+        if "scid" not in self.params:
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_parameter("Missing 'scid' parameter")
+            )
+        try:
+            self._check_scid_derivation()
+        except ValueError as err:
+            raise InvalidDocumentState(
+                ProblemDetails(
+                    type="#scid-verification-failed",
+                    title="SCID validation failed",
+                    detail=str(err),
+                )
+            ) from None
+
     def _check_scid_derivation(self):
-        if self.version_number != 1:
-            raise ValueError("Expected version number to be 1")
         scid = self.params.get("scid")
+        if not isinstance(scid, str):
+            raise ValueError("Invalid 'scid' parameter")
         if self.last_version_id != scid:
             raise ValueError("Parameter 'scid' must match last version ID")
         genesis_doc = json.loads(
@@ -170,6 +218,55 @@ class DocumentState:
         )
         if genesis_hash != scid:
             raise ValueError(f"Invalid SCID derivation, expected: {genesis_hash}")
+
+    def _check_key_rotation(self):
+        last_key_hashes = self.last_key_hashes
+        if last_key_hashes is None:
+            return
+
+        if not isinstance(last_key_hashes, list) or not all(
+            isinstance(k, str) for k in last_key_hashes
+        ):
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_parameter(
+                    "Invalid value for 'nextKeyHashes', expected list of strings"
+                )
+            )
+        update_keys = self.params_update.get("updateKeys")
+        if update_keys is None:
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_parameter(
+                    "'updateKeys' must be provided when 'nextKeyHashes' is non-empty"
+                )
+            )
+
+        if not isinstance(update_keys, list) or not all(
+            isinstance(k, str) for k in update_keys
+        ):
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_parameter(
+                    "Invalid value for 'updateKeys', expected list of strings"
+                )
+            )
+
+        # new update keys must be found in old hashes
+        check_hashes = {}
+        for h in last_key_hashes:
+            check_hashes[h] = HashInfo.identify_hash(h)
+        for new_key in update_keys:
+            found = False
+            for key_hash, hash_info in check_hashes.items():
+                check_hash = hash_info.formatted_hash(new_key.encode("utf-8"))
+                if check_hash == key_hash:
+                    found = True
+                    break
+            if not found:
+                raise InvalidDocumentState(
+                    ProblemDetails.invalid_parameter(
+                        f"Encoded key '{new_key}' in 'updateKeys' is not found in "
+                        "previous 'nextKeyHashes' parameter"
+                    )
+                )
 
     def create_next(
         self,
@@ -204,6 +301,21 @@ class DocumentState:
         return ret
 
     @classmethod
+    def load_history_json(
+        cls, line: str, prev_state: Optional["DocumentState"] | None
+    ) -> "DocumentState":
+        """Load a serialized history line encoded as JSON."""
+        try:
+            parts = json.loads(line)
+        except ValueError as err:
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_log_entry(
+                    f"Could not parse log entry as JSON: {str(err)}"
+                )
+            ) from None
+        return cls.load_history_line(parts, prev_state)
+
+    @classmethod
     def load_history_line(
         cls, parts: dict, prev_state: Optional["DocumentState"] | None
     ) -> "DocumentState":
@@ -219,67 +331,108 @@ class DocumentState:
         missing = {"versionId", "versionTime", "parameters", "state", "proof"}
 
         if not isinstance(parts, dict):
-            raise ValueError("Expected object")
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_log_entry(
+                    "The log entry is not an object.",
+                )
+            )
         for k, v in parts.items():
             if k == "versionId":
                 if not isinstance(v, str):
-                    raise ValueError("Expected string: versionId")
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_log_entry(
+                            "Invalid `versionId` property: expected string.",
+                        )
+                    )
                 version_id = v
                 try:
                     version_number = int(v.split("-")[0])
-                except ValueError as e:
-                    raise ValueError("Invalid versionId") from e
+                except ValueError:
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_log_entry(
+                            "Invalid `versionId` property.",
+                        )
+                    ) from None
                 check_ver = prev_state.version_number + 1 if prev_state else 1
                 if check_ver != version_number:
-                    raise ValueError("Version number mismatch")
+                    raise InvalidDocumentState(
+                        ProblemDetails(
+                            type="#version-mismatch",
+                            title="Invalid version number sequence.",
+                            expected=check_ver,
+                            found=version_number,
+                        )
+                    )
 
             elif k == "versionTime":
                 if not isinstance(v, str):
-                    raise ValueError("Expected string: versionTime")
-                timestamp, timestamp_raw = make_timestamp(v)
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_log_entry(
+                            "Invalid `versionTime` property: expected string.",
+                        )
+                    )
+                try:
+                    timestamp, timestamp_raw = make_timestamp(v)
+                except ValueError:
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_log_entry(
+                            "Invalid `versionTime` property.",
+                        )
+                    ) from None
 
             elif k == "parameters":
                 if not isinstance(v, dict):
-                    raise ValueError("Expected object: parameters")
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_log_entry(
+                            "Invalid `parameters` property: expected object.",
+                        )
+                    )
                 params_update = deepcopy(v)
 
             elif k == "state":
                 if not isinstance(v, dict):
-                    raise ValueError("Expected object: state")
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_log_entry(
+                            "Invalid `state` property: expected object.",
+                        )
+                    )
                 if not v.get("id"):
-                    raise ValueError("Invalid document state: missing 'id'")
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_log_entry(
+                            "Invalid `state` property: missing document id.",
+                        )
+                    )
                 document = deepcopy(v)
 
             elif k == "proof":
-                if not isinstance(v, list):
-                    raise ValueError("Expected list: proof")
+                if not isinstance(v, list) or any(not isinstance(prf, dict) for prf in v):
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_log_entry(
+                            "Invalid `proof` property: expected list of objects.",
+                        )
+                    )
                 proofs = deepcopy(v)
 
             else:
-                raise ValueError(f"Unexpected property: '{k}'")
+                raise InvalidDocumentState(
+                    ProblemDetails.invalid_log_entry(
+                        f"Unexpected property: '{k}'",
+                    )
+                )
 
             missing.remove(k)
 
         if missing:
-            raise ValueError("Missing: " + (", ".join(missing)))
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_log_entry(
+                    "Missing one or more properties: " + (", ".join(missing)),
+                )
+            )
 
         old_params = prev_state.params if prev_state else {}
         params = cls._update_params(old_params, params_update)
-        last_key_hashes = prev_state.next_key_hashes if prev_state else None
-        if last_key_hashes:
-            new_keys = params_update.get("updateKeys")
-            if new_keys is None:
-                raise ValueError(
-                    "'updateKeys' must be provided when 'nextKeyHashes' is previously set"
-                )
-            cls._validate_key_rotation(last_key_hashes, new_keys)
 
         last_version_id = prev_state.version_id if prev_state else params["scid"]
-
-        if not isinstance(proofs, list) or any(
-            not isinstance(prf, dict) for prf in proofs
-        ):
-            raise ValueError("Invalid proofs")
 
         state = DocumentState(
             version_id=version_id,
@@ -291,41 +444,14 @@ class DocumentState:
             document=document,
             proofs=proofs,
             last_version_id=last_version_id,
-            last_key_hashes=last_key_hashes,
+            last_key_hashes=prev_state.next_key_hashes if prev_state else None,
         )
+
         if not prev_state:
-            state._check_scid_derivation()
+            state._check_genesis_entry()
+        state._check_key_rotation()
+
         return state
-
-    @classmethod
-    def _validate_key_rotation(cls, key_hashes: list[str], update_keys: list[str]):
-        if not isinstance(key_hashes, list) or not all(
-            isinstance(k, str) for k in key_hashes
-        ):
-            raise ValueError(
-                "Invalid value for 'nextKeyHashes', expected list of strings"
-            )
-        if not isinstance(update_keys, list) or not all(
-            isinstance(k, str) for k in update_keys
-        ):
-            raise ValueError("Invalid value for 'updateKeys', expected list of strings")
-
-        # new update keys must be found in old hashes
-        check_hashes = {}
-        for h in key_hashes:
-            check_hashes[h] = HashInfo.identify_hash(h)
-        for new_key in update_keys:
-            found = False
-            for key_hash, hash_info in check_hashes.items():
-                check_hash = hash_info.formatted_hash(new_key.encode("utf-8"))
-                if check_hash == key_hash:
-                    found = True
-                    break
-            if not found:
-                raise ValueError(
-                    f"Encoded key '{new_key}' in 'updateKeys' is not found in previous "
-                    "'nextKeyHashes' parameter"
-                )
 
     def history_line(self) -> dict:
         """Generate the unserialized history line for this document state."""
@@ -376,13 +502,22 @@ class DocumentState:
         elif isinstance(ctls, str):
             ctls = [ctls]
         elif not isinstance(ctls, list):
-            raise ValueError("Invalid controller property")
+            raise InvalidDocumentState(
+                ProblemDetails(
+                    type="#invalid-did-document", title="Invalid 'controller' property"
+                )
+            )
         return ctls
 
     @property
     def is_authz_event(self) -> bool:
         """Determine if this document state constitutes an authorization event."""
         return not AUTHZ_PARAMS.isdisjoint(self.params_update.keys())
+
+    @property
+    def portable(self) -> bool:
+        """Fetch the `portable` flag from the parameters."""
+        return bool(self.params.get("portable"))
 
     @property
     def scid(self) -> str:
@@ -397,26 +532,67 @@ class DocumentState:
             not isinstance(upd_keys, list)
             or not all(isinstance(k, str) for k in upd_keys)
         ):
-            raise ValueError("Invalid 'updateKeys' parameter")
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_parameter(
+                    "Invalid 'updateKeys' parameter: expected list of strings"
+                )
+            )
         return upd_keys or []
 
     @property
-    def next_key_hashes(self) -> list[str]:
+    def next_key_hashes(self) -> list[str] | None:
         """Fetch a list of the `nextKeyHashes` entries from the parameters."""
         next_keys = self.params.get("nextKeyHashes")
         if next_keys is not None and (
             not isinstance(next_keys, list)
+            or not next_keys
             or not all(isinstance(k, str) for k in next_keys)
         ):
-            raise ValueError("Invalid 'nextKeyHashes' parameter")
-        return next_keys or []
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_parameter(
+                    "Invalid 'nextKeyHashes' parameter: expected list of strings"
+                )
+            )
+        return next_keys
+
+    @property
+    def watchers(self) -> list | None:
+        """Fetch the active `watchers` parameter value."""
+        watchers = self.params.get("watchers")
+        if watchers is not None and (
+            not isinstance(watchers, list)
+            or not all(isinstance(k, str) for k in watchers)
+        ):
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_parameter(
+                    "Invalid 'watchers' parameter: expected list of strings"
+                )
+            )
+        return watchers
+
+    @property
+    def witness(self) -> dict | None:
+        """Fetch the active `witness` parameter value."""
+        witness = self.params.get("witness")
+        if witness is not None and not isinstance(witness, dict):
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_parameter(
+                    "Invalid 'witness' parameter: expected object"
+                )
+            )
+        return witness
 
     @property
     def witness_rule(self) -> WitnessRule | None:
-        """Fetch the active `witness` rules from the parameters."""
-        rule = self.params.get("witness")
+        """Fetch the active `witness` rules as a `WitnessRule` instance."""
+        rule = self.witness
         if rule is not None:
-            rule = WitnessRule.deserialize(rule)
+            try:
+                rule = WitnessRule.deserialize(rule)
+            except ValueError as err:
+                raise InvalidDocumentState(
+                    ProblemDetails.invalid_parameter(str(err))
+                ) from None
         return rule
 
     def create_proof(
@@ -455,72 +631,123 @@ class DocumentState:
         for param, pvalue in new_params.items():
             if param == "deactivated":
                 if pvalue not in (None, True, False):
-                    raise ValueError("Unsupported value for 'deactivated' parameter")
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            "Unsupported value for 'deactivated' parameter", found=pvalue
+                        )
+                    )
             elif param == "method":
                 if not isinstance(pvalue, str) or not pvalue:
-                    raise ValueError(
-                        f"Unsupported value for 'method' parameter: {pvalue!r}"
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            "Unsupported value for 'method' parameter", found=pvalue
+                        )
                     )
             elif param == "nextKeyHashes":
                 if pvalue is not None and (
                     not isinstance(pvalue, list)
                     or not all(isinstance(k, str) for k in pvalue)
                 ):
-                    raise ValueError(
-                        f"Unsupported value for 'nextKeyHashes' parameter: {pvalue!r}"
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            "Unsupported value for 'nextKeyHashes' parameter",
+                            found=pvalue,
+                        )
                     )
             elif param == "portable":
                 if not isinstance(pvalue, bool):
-                    raise ValueError(
-                        f"Unsupported value for 'portable' parameter: {pvalue!r}"
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            "Unsupported value for 'portable' parameter", found=pvalue
+                        )
                     )
                 if pvalue and old_params and not old_params.get("portable"):
-                    raise ValueError(
-                        "Parameter 'portable' may only be enabled in the first entry"
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            "Parameter 'portable' may only be enabled in the first entry"
+                        )
                     )
             elif param == "scid":
                 if old_params:
-                    raise ValueError("Parameter 'scid' cannot be updated")
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            "Parameter 'scid' cannot be updated"
+                        )
+                    )
                 if not isinstance(pvalue, str) or not pvalue:
-                    raise ValueError(
-                        f"Unsupported value for 'scid' parameter: {pvalue!r}"
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            "Unsupported value for 'scid' parameter: expected string",
+                            found=pvalue,
+                        )
                     )
             elif param == "ttl":
                 if not isinstance(pvalue, int) or pvalue <= 0:
-                    raise ValueError(f"Unsupported value for 'ttl' parameter: {pvalue!r}")
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            "Unsupported value for 'ttl' parameter",
+                            found=pvalue,
+                        )
+                    )
             elif param == "updateKeys":
                 if pvalue is not None and (
                     not isinstance(pvalue, list)
                     or not all(isinstance(k, str) for k in pvalue)
                 ):
-                    raise ValueError(
-                        f"Unsupported value for 'updateKeys' parameter: {pvalue!r}"
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            "Unsupported value for 'updateKeys' parameter",
+                            found=pvalue,
+                        )
+                    )
+            elif param == "watchers":
+                if pvalue is not None and (
+                    not isinstance(pvalue, list)
+                    or not all(isinstance(k, str) for k in pvalue)
+                ):
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            "Unsupported value for 'watchers' parameter",
+                            found=pvalue,
+                        )
                     )
             elif param == "witness":
                 if pvalue is not None:
-                    # will throw a ValueError if invalid
-                    WitnessRule.deserialize(pvalue)
+                    try:
+                        WitnessRule.deserialize(pvalue)
+                    except ValueError as err:
+                        raise InvalidDocumentState(
+                            ProblemDetails.invalid_parameter(
+                                str(err),
+                                found=pvalue,
+                            )
+                        ) from None
             else:
-                raise ValueError(f"Unsupported history parameter: {param!r}")
+                raise InvalidDocumentState(
+                    ProblemDetails.invalid_parameter(
+                        f"Unsupported parameter: {param!r}",
+                    )
+                )
 
             if pvalue is None:
                 if param in res:
                     del res[param]
             else:
                 res[param] = pvalue
-
-        if "method" not in res:
-            raise ValueError("Invalid initial parameters: missing 'method'")
-        if "scid" not in res:
-            raise ValueError("Invalid initial parameters: missing 'scid'")
         return res
 
 
-def verify_state_proofs(state: DocumentState, prev_state: DocumentState):
+def verify_state_proofs(state: DocumentState, prev_state: DocumentState | None):
     """Verify all proofs on a document state."""
     proofs = state.proofs
     if not proofs:
-        raise ValueError("Missing history version proof(s)")
+        raise InvalidDocumentState(
+            ProblemDetails(
+                type="#proof-verification-failed",
+                title="No proofs on log entry",
+                versionId=state.version_id,
+            )
+        )
     if not prev_state or prev_state.next_key_hashes:
         update_keys = state.update_keys
     else:
@@ -529,11 +756,28 @@ def verify_state_proofs(state: DocumentState, prev_state: DocumentState):
         method_id = proof.get("verificationMethod")
         vmethod = resolve_did_key(method_id)
         if vmethod["publicKeyMultibase"] not in update_keys:
-            raise ValueError(f"Update key not found: {method_id}")
-        state.verify_proof(
-            proof=proof,
-            method=vmethod,
-        )
+            raise InvalidDocumentState(
+                ProblemDetails(
+                    type="#proof-verification-failed",
+                    title="Proof verification failed",
+                    detail=f"Update key not found: {method_id}",
+                    versionId=state.version_id,
+                )
+            )
+        try:
+            state.verify_proof(
+                proof=proof,
+                method=vmethod,
+            )
+        except ValueError as err:
+            raise InvalidDocumentState(
+                ProblemDetails(
+                    type="#proof-verification-failed",
+                    title="Proof verification failed",
+                    detail=str(err),
+                    versionId=state.version_id,
+                )
+            ) from None
 
 
 def _canonicalize_log_line(line: dict) -> bytes:

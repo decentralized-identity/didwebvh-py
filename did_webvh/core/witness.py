@@ -11,7 +11,6 @@ class WitnessEntry:
     """A single witness definition."""
 
     id: str
-    weight: int
 
     @classmethod
     def deserialize(cls, value) -> "WitnessEntry":
@@ -19,19 +18,14 @@ class WitnessEntry:
         if not isinstance(value, dict):
             raise ValueError("Invalid 'witnesses' value, expected dict")
         ident = None
-        weight = None
         for k, v in value.items():
             if k == "id":
                 ident = v
-            elif k == "weight":
-                weight = v
             else:
                 raise ValueError(f"Unexpected key '{k}' in 'witnesses' value")
         if not isinstance(ident, str) or not ident:
             raise ValueError("Expected string for witness identifier")
-        if not isinstance(weight, int) or weight < 0:
-            raise ValueError("Expected non-negative integer for witness weight")
-        return WitnessEntry(ident, weight)
+        return WitnessEntry(ident)
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +39,7 @@ class WitnessRule:
     def deserialize(cls, value) -> "WitnessRule":
         """Deserialize from a dictionary value."""
         if not isinstance(value, dict):
-            raise ValueError("Invalid 'witness' value, expected dict")
+            raise ValueError("Invalid 'witness' value, expected object")
         threshold = None
         witnesses = None
         for k, v in value.items():
@@ -95,7 +89,7 @@ class WitnessChecks:
                             and check_num <= len(self.versions)
                             and self.versions[check_num - 1] == check_ver
                         ):
-                            total += entry.weight
+                            total += 1
                             break
             if total < rule.threshold:
                 return False
@@ -112,7 +106,7 @@ class WitnessChecks:
                             and check_num <= len(self.versions)
                             and self.versions[check_num - 1] == check_ver
                         ):
-                            total += entry.weight
+                            total += 1
                             break
             if total < latest_rule.threshold:
                 return False
