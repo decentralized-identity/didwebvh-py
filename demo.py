@@ -114,9 +114,7 @@ async def demo(
             **(params or {}),
             "witness": {
                 "threshold": 2,
-                "witnesses": [
-                    {"id": _format_did_key(w), "weight": 1} for w in witness_keys
-                ],
+                "witnesses": [{"id": _format_did_key(w)} for w in witness_keys],
             },
         }
     (doc_dir, state, genesis_key) = await auto_provision_did(
