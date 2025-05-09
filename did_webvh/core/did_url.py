@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from typing import ClassVar
 from urllib.parse import parse_qs
 
-SCID_PLACEHOLDER = "{SCID}"
-
 
 @dataclass
 class DIDUrl:
@@ -68,6 +66,8 @@ class DIDUrl:
     @property
     def query_dict(self) -> dict:
         """Extract a parameter dictionary for this DID URL."""
-        if self.query:
-            return {k: v[-1] for k, v in parse_qs(self.query)}
+        if qs := self.query:
+            if not qs.startswith("?"):
+                raise ValueError("Invalid query string: missing prefix")
+            return {k: v[-1] for k, v in parse_qs(qs.removeprefix("?")).items()}
         return {}

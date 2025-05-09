@@ -53,7 +53,7 @@ async def test_verify_witnesses():
             WitnessRule(
                 threshold=1,
                 witnesses=(WitnessEntry(id1, 1),),
-            ): "4-..."
+            ): 4
         },
         versions=["1-...", "2-...", "3-...", "4-..."],
     )
@@ -64,7 +64,7 @@ async def test_verify_witnesses():
             WitnessRule(
                 threshold=2,
                 witnesses=(WitnessEntry(id1, 1),),
-            ): "4-..."
+            ): 4
         },
         versions=["1-...", "2-...", "3-...", "4-..."],
     )

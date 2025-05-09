@@ -12,7 +12,6 @@ def test_jcs_sign():
     proof_input = DocumentState.initial(
         params={
             "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
-            "method": "did:tdw:0.4",
         },
         document={
             "@context": ["https://www.w3.org/ns/did/v1"],

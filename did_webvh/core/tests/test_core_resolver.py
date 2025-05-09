@@ -118,7 +118,7 @@ async def test_resolve_history():
     assert res.document is None
     assert res.resolution_metadata == {
         "error": "invalidDid",
-        "errorMessage": "Document @id mismatch",
+        "errorMessage": "Document @id mismatch, expected 'bad-docid'",
         "contentType": "application/did+ld+json",
     }
 

@@ -4,7 +4,7 @@ import urllib
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .core.did_url import SCID_PLACEHOLDER
+from .const import SCID_PLACEHOLDER
 
 
 @dataclass

@@ -8,14 +8,15 @@ from typing import Optional
 
 import jsoncanon
 
+from ..const import METHOD_NAME, METHOD_VERSION, SCID_PLACEHOLDER
 from .date_utils import iso_format_datetime, make_timestamp
-from .did_url import SCID_PLACEHOLDER
 from .hash_utils import DEFAULT_HASH, HashInfo
 from .proof import di_jcs_sign, di_jcs_verify, resolve_did_key
 from .types import SigningKey, VerifyingKey
 from .witness import WitnessRule
 
 AUTHZ_PARAMS = {"nextKeyHashes", "updateKeys"}
+DEFAULT_METHOD = f"did:{METHOD_NAME}:{METHOD_VERSION}"
 
 
 @dataclass
@@ -26,6 +27,7 @@ class DocumentMetadata:
     updated: datetime
     version_id: str
     version_number: int
+    version_time: datetime
     deactivated: bool = False
 
     def serialize(self) -> dict:
@@ -36,6 +38,7 @@ class DocumentMetadata:
             "deactivated": self.deactivated,
             "versionId": self.version_id,
             "versionNumber": self.version_number,
+            "versionTime": iso_format_datetime(self.version_time),
         }
 
 
@@ -77,7 +80,11 @@ class DocumentState:
         if SCID_PLACEHOLDER not in doc_id:
             raise ValueError("SCID placeholder missing from document id")
 
-        params = {**params, "scid": SCID_PLACEHOLDER}
+        params = params.copy()
+        if "method" not in params:
+            params["method"] = DEFAULT_METHOD
+        if "scid" not in params:
+            params["scid"] = SCID_PLACEHOLDER
         genesis = DocumentState(
             params=params,
             params_update=params.copy(),
@@ -99,7 +106,7 @@ class DocumentState:
         genesis.document = doc_v1
         genesis.last_version_id = genesis.version_id
         genesis.version_id = "1-" + genesis._generate_entry_hash(hash_info)
-        genesis.version_number = genesis.version_number + 1
+        genesis.version_number = 1
 
         # ensure consistency
         genesis._check_scid_derivation()
@@ -321,7 +328,7 @@ class DocumentState:
                 )
 
     def history_line(self) -> dict:
-        """Generate the serialized history line for this document state."""
+        """Generate the unserialized history line for this document state."""
         return {
             "versionId": self.version_id,
             "versionTime": self.timestamp_raw,
@@ -329,6 +336,10 @@ class DocumentState:
             "state": self.document,
             "proof": self.proofs,
         }
+
+    def history_json(self) -> str:
+        """Generate the JSON-serialized history line for this document state."""
+        return json.dumps(self.history_line())
 
     @property
     def document_id(self) -> str:
@@ -348,12 +359,12 @@ class DocumentState:
         """Fetch a copy of the DID document with did web transformation."""
         document = deepcopy(self.document)
         transformed_document = json.loads(
-            json.dumps(document).replace(f'did:webvh:{self.scid}:', 'did:web:')
+            json.dumps(document).replace(f"did:webvh:{self.scid}:", "did:web:")
         )
-        if transformed_document.get('alsoKnownAs'):
-            transformed_document['alsoKnownAs'].append(self.document_id)
+        if transformed_document.get("alsoKnownAs"):
+            transformed_document["alsoKnownAs"].append(self.document_id)
         else:
-            transformed_document['alsoKnownAs'] = [self.document_id]
+            transformed_document["alsoKnownAs"] = [self.document_id]
         return transformed_document
 
     @property
@@ -424,6 +435,16 @@ class DocumentState:
             kid=kid,
         )
 
+    def sign(
+        self,
+        sk: SigningKey,
+        *,
+        timestamp: datetime | None = None,
+        kid: str | None = None,
+    ):
+        """Create and append a new proof for a document state with a signing key."""
+        self.proofs.append(self.create_proof(sk, timestamp=timestamp, kid=kid))
+
     def verify_proof(self, proof: dict, method: VerifyingKey | dict):
         """Verify a proof against a document state."""
         return di_jcs_verify(self.history_line(), proof, method)
@@ -488,8 +509,10 @@ class DocumentState:
             else:
                 res[param] = pvalue
 
-        if "method" not in res or "scid" not in res:
-            raise ValueError("Invalid initial parameters")
+        if "method" not in res:
+            raise ValueError("Invalid initial parameters: missing 'method'")
+        if "scid" not in res:
+            raise ValueError("Invalid initial parameters: missing 'scid'")
         return res
 
 

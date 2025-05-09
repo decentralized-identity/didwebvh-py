@@ -1,6 +1,5 @@
 """History file management."""
 
-import json
 from datetime import datetime
 from pathlib import Path
 
@@ -53,7 +52,7 @@ def write_document_state(
 
     with history_path.open(mode) as out:
         print(
-            json.dumps(state.history_line()),
+            state.history_json(),
             file=out,
         )
 

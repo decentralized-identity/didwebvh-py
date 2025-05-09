@@ -64,7 +64,8 @@ async def resolve_did(
     did: DIDUrl | str,
     *,
     local_history: Path | None = None,
-    version_id: int | str | None = None,
+    version_id: str | None = None,
+    version_number: int | str | None = None,
     version_time: datetime | str | None = None,
     add_implicit: bool = True,
 ) -> ResolutionResult:
@@ -78,6 +79,7 @@ async def resolve_did(
         didurl.did,
         source,
         version_id=version_id,
+        version_number=version_number,
         version_time=version_time,
     )
     if result.document and add_implicit:
@@ -133,6 +135,7 @@ async def resolve(didurl: str, *, local_history: Path | None = None) -> dict:
     relative_ref = query.get("relativeRef")
     service_name = query.get("service")
     version_id = query.get("versionId")
+    version_number = query.get("versionNumber")
     version_time = query.get("versionTime")
     # FIXME reject unknown query parameters?
 
@@ -145,6 +148,7 @@ async def resolve(didurl: str, *, local_history: Path | None = None) -> dict:
         didurl.root,
         local_history=local_history,
         version_id=version_id,
+        version_number=version_number,
         version_time=version_time,
     )
 
