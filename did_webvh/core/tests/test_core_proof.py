@@ -22,7 +22,7 @@ def test_jcs_sign():
     proof = di_jcs_sign(
         proof_input,
         sk=sk1,
-        purpose="authentication",
+        purpose="assertionMethod",
         challenge="challenge",
     )
     assert isinstance(proof, dict)
@@ -34,7 +34,7 @@ def test_jcs_sign():
     proof = di_jcs_sign(
         proof_input,
         sk=sk2,
-        purpose="authentication",
+        purpose="assertionMethod",
         challenge="challenge",
     )
     di_jcs_verify(proof_input, proof, sk2)
@@ -47,7 +47,7 @@ def test_jcs_sign():
     proof = di_jcs_sign(
         proof_input,
         sk=sk3,
-        purpose="authentication",
+        purpose="assertionMethod",
         challenge="challenge",
     )
     di_jcs_verify(proof_input, proof, sk3)
@@ -57,6 +57,6 @@ def test_jcs_sign():
         _ = di_jcs_sign(
             proof_input,
             sk=AskarSigningKey.generate("bls12381g1g2"),
-            purpose="authentication",
+            purpose="assertionMethod",
             challenge="challenge",
         )
