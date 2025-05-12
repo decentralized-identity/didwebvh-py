@@ -17,11 +17,11 @@ class ProblemDetails:
     DEFAULT_SPEC_URI = "https://didwebvh.info/main/resolution-errors/"
 
     @classmethod
-    def invalid_did(cls, detail: str = None, **exts):
+    def invalid_document(cls, detail: str = None, **exts):
         """Instantiate a generic invalid DID error."""
         return cls(
-            type="https://w3id.org/security#INVALID_CONTROLLED_IDENTIFIER_DOCUMENT_ID",
-            title="The resolved DID is invalid.",
+            type="#invalid-document",
+            title="The resolved DID document is invalid.",
             detail=detail,
             **exts,
         )
@@ -51,7 +51,7 @@ class ProblemDetails:
         """Instantiate an invalid resolution parameter error."""
         return cls(
             type="#invalid-resolution-parameter",
-            title="Encountered an invalid resolution parameter",
+            title="Encountered an invalid DID resolution parameter",
             detail=detail,
             **exts,
         )

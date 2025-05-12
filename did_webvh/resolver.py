@@ -127,10 +127,10 @@ async def resolve(didurl: str, *, local_history: Path | None = None) -> dict:
     """Resolve a did:webvh DID URL, applying any included DID resolution parameters."""
     try:
         didurl = DIDUrl.decode(didurl)
-    except ValueError as err:
+    except ValueError:
         return ResolutionResult(
-            resolution_metadata=ResolutionError.invalid_did(
-                ProblemDetails.invalid_did(str(err))
+            resolution_metadata=ResolutionError.not_found(
+                ProblemDetails.invalid_resolution_parameter("Invalid DID URL")
             )
         ).serialize()
 

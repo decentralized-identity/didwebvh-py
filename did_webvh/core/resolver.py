@@ -271,14 +271,6 @@ class DidResolver:
             )
         except ResolutionError as err:
             return ResolutionResult(resolution_metadata=err)
-        except ValueError as err:
-            return ResolutionResult(
-                resolution_metadata=ResolutionError.invalid_did(
-                    ProblemDetails.invalid_did(
-                        detail=str(err),
-                    ),
-                )
-            )
 
         if state.document_id != document_id:
             res_result = ResolutionResult(
@@ -445,8 +437,12 @@ class DidResolver:
             if aborted_err:
                 raise aborted_err
             if not state:
-                raise ResolutionError.invalid_did(
-                    ProblemDetails.invalid_did("Empty document history"),
+                raise ResolutionError.not_found(
+                    ProblemDetails(
+                        type="#missing-log",
+                        title="Missing log",
+                        detail="Empty document history",
+                    ),
                 )
             if version_id or version_number or version_time:
                 # FIXME may adjust problem details based on request parameters
@@ -477,8 +473,7 @@ class DidResolver:
                 # FIXME add failed check to resolution metadata
                 valid = checks.verify(validated, at_version=found.version_number)
             if not valid:
-                raise ResolutionError(
-                    "invalidDid",
+                raise ResolutionError.invalid_did(
                     ProblemDetails(
                         type="#witness-verification-failed",
                         title="Insufficient witness proofs.",

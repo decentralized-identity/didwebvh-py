@@ -28,31 +28,24 @@ class WebvhVerifier(HistoryVerifier):
 
 def _check_document_id_format(doc_id: str, scid: str):
     try:
-        url = DIDUrl.decode(doc_id)
-    except ValueError as err:
-        raise InvalidDocumentState(
-            ProblemDetails.invalid_did(str(err), found=doc_id)
-        ) from None
-    if url.root != url:
-        raise InvalidDocumentState(
-            ProblemDetails.invalid_did("Document identifier must be a DID", found=doc_id)
-        )
-    if url.method != METHOD_NAME:
-        raise InvalidDocumentState(
-            ProblemDetails.invalid_did(f"Expected DID method to be '{METHOD_NAME}'")
-        )
-    try:
-        pathinfo = DomainPath.parse_identifier(url.identifier)
-    except ValueError as err:
-        raise InvalidDocumentState(
-            ProblemDetails.invalid_did(str(err), found=doc_id)
-        ) from None
-    if pathinfo.scid != scid:
-        raise InvalidDocumentState(
-            ProblemDetails.invalid_did(
-                "SCID must be the first component of the method-specific ID", found=doc_id
+        try:
+            url = DIDUrl.decode(doc_id)
+        except ValueError:
+            raise ValueError("Could not parse document ID as DID URL") from None
+        if url.root != url:
+            raise ValueError("Document ID must not have a path or query components")
+        if url.method != METHOD_NAME:
+            raise ValueError(
+                f"Document ID uses incorrect DID method, expected '{METHOD_NAME}'"
             )
-        )
+        # may raise ValueError
+        pathinfo = DomainPath.parse_identifier(url.identifier)
+        if pathinfo.scid != scid:
+            raise ValueError("SCID must be the first component of the method-specific ID")
+    except ValueError as err:
+        raise InvalidDocumentState(
+            ProblemDetails.invalid_document(f"Invalid document ID: {err}", found=doc_id)
+        ) from None
 
 
 def _verify_params(state: DocumentState, prev_state: DocumentState):
