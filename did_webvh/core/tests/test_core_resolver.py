@@ -116,18 +116,17 @@ async def test_resolve_history():
 
     res = await resolver.resolve("bad-docid", history)
     assert res.document is None
-    assert res.resolution_metadata == {
-        "error": "invalidDid",
-        "errorMessage": "Document @id mismatch, expected 'bad-docid'",
-        "contentType": "application/did+ld+json",
-    }
+    assert res.resolution_metadata["error"] == "invalidDid"
+    assert res.resolution_metadata["problemDetails"]["type"].endswith(
+        "#did-log-id-mismatch"
+    )
 
 
 async def test_resolve_history_failed_request():
     class BadResolver(HistoryResolver):
         def resolve_entry_log(self, _document_id: str) -> AsyncTextGenerator:
             """Resolve the entry log file for a DID."""
-            raise AsyncTextReadError("resolution error")
+            raise AsyncTextReadError("read error")
 
     resolver = DidResolver(MockHistoryVerifier())
     res = await resolver.resolve("docid", BadResolver())

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .core.did_url import DIDUrl
 from .core.file_utils import AsyncTextReadError, read_url
+from .core.problem_details import ProblemDetails
 from .core.resolver import (
     DereferencingResult,
     DidResolver,
@@ -101,8 +102,8 @@ async def _resolve_relative_ref(
     url = _resolve_relative_ref_to_url(document, service, relative_ref)
     if not url:
         return DereferencingResult(
-            dereferencing_metadata=ResolutionError(
-                "notFound", "Unable to resolve relative path"
+            dereferencing_metadata=ResolutionError.not_found(
+                # "Unable to resolve relative path"
             ).serialize()
         )
     try:
@@ -114,10 +115,10 @@ async def _resolve_relative_ref(
                 content_metadata={},
                 dereferencing_metadata={},
             )
-    except AsyncTextReadError as err:
+    except AsyncTextReadError:
         return DereferencingResult(
-            dereferencing_metadata=ResolutionError(
-                "notFound", f"Error fetching relative path: {str(err)}"
+            dereferencing_metadata=ResolutionError.not_found(
+                # f"Error fetching relative path: {str(err)}"
             ).serialize()
         )
 
@@ -126,9 +127,11 @@ async def resolve(didurl: str, *, local_history: Path | None = None) -> dict:
     """Resolve a did:webvh DID URL, applying any included DID resolution parameters."""
     try:
         didurl = DIDUrl.decode(didurl)
-    except ValueError as err:
+    except ValueError:
         return ResolutionResult(
-            resolution_metadata=ResolutionError("invalidDid", str(err)).serialize()
+            resolution_metadata=ResolutionError.not_found(
+                ProblemDetails.invalid_resolution_parameter("Invalid DID URL")
+            )
         ).serialize()
 
     query = didurl.query_dict

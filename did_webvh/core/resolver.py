@@ -1,7 +1,7 @@
 """Support for DID resolution."""
 
 import json
-from asyncio import Event, Task, create_task, get_running_loop
+from asyncio import Event, Future, ensure_future, get_running_loop
 from collections.abc import Awaitable
 from copy import deepcopy
 from dataclasses import dataclass
@@ -16,34 +16,59 @@ from .file_utils import (
     AsyncTextReadError,
     read_text_file,
 )
-from .state import DocumentMetadata, DocumentState, verify_state_proofs
-from .witness import WitnessChecks, verify_witness_proofs
+from .problem_details import ProblemDetails
+from .state import (
+    DocumentMetadata,
+    DocumentState,
+    InvalidDocumentState,
+    verify_state_proofs,
+)
+from .witness import WitnessChecks, WitnessRule, verify_witness_proofs
 
 
 class ResolutionError(Exception):
     """An error raised during DID resolution."""
 
     error: str
-    message: Optional[str] = None
+    problem_details: ProblemDetails | list[ProblemDetails] | None = None
 
     def __init__(
         self,
         error: str,
-        message: str = None,
-        status_code: int = 400,
+        problem_details: ProblemDetails | list[ProblemDetails] | None = None,
     ):
         """Initializer."""
-        super().__init__()
+        super().__init__(error)
         self.error = error
-        self.message = message
-        self.status_code = status_code
+        self.problem_details = problem_details
+
+    @classmethod
+    def invalid_did(
+        cls, problem_details: ProblemDetails | list[ProblemDetails] | None = None
+    ) -> "ResolutionError":
+        """Initialize a new `invalidDid` resolution error."""
+        return cls("invalidDid", problem_details)
+
+    @classmethod
+    def not_found(
+        cls, problem_details: ProblemDetails | list[ProblemDetails] | None = None
+    ) -> "ResolutionError":
+        """Initialize a new `notFound` resolution error."""
+        return cls("notFound", problem_details)
 
     def serialize(self) -> dict:
         """Serialize this error to a JSON-compatible dictionary."""
+        details = self.problem_details
+        if isinstance(details, list):
+            details = [det.serialize() for det in details]
+        elif isinstance(details, ProblemDetails):
+            details = details.serialize()
+        else:
+            details = None
         return {
-            "error": self.error,
-            "errorMessage": self.message,
             "contentType": "application/did+ld+json",
+            "error": self.error,
+            **({"problemDetails": details} if details else {}),
         }
 
 
@@ -54,6 +79,20 @@ class ResolutionResult:
     document: Optional[dict] = None
     document_metadata: Optional[dict] = None
     resolution_metadata: Optional[dict] = None
+
+    def __init__(
+        self,
+        document: Optional[dict] = None,
+        document_metadata: Optional[dict] = None,
+        resolution_metadata: Optional[dict] = None,
+    ):
+        """Initializer."""
+        super().__init__()
+        if isinstance(resolution_metadata, ResolutionError):
+            resolution_metadata = resolution_metadata.serialize()
+        self.document = document
+        self.document_metadata = document_metadata
+        self.resolution_metadata = resolution_metadata
 
     def serialize(self) -> dict:
         """Serialize this result to a JSON-compatible dictionary."""
@@ -134,7 +173,12 @@ class HistoryVerifier:
             and prev_state.document_id != state.document_id
             and not prev_state.params.get("portable", False)
         ):
-            raise ValueError("Document ID updated on non-portable DID")
+            raise InvalidDocumentState(
+                ProblemDetails(
+                    type="#portability-disabled",
+                    title="Document ID updated on non-portable DID",
+                )
+            )
 
         if self._verify_proofs:
             # and state.version_number == 1 or state.is_authz_event or is_final
@@ -149,7 +193,7 @@ class VerifyTasks:
     def __init__(self):
         """Create a new instance."""
         self.failed: dict[int, list] = {}
-        self.pending: dict[Task, int] = {}
+        self.pending: dict[Future, int] = {}
         self.done = Event()
         self.done.set()
 
@@ -162,7 +206,7 @@ class VerifyTasks:
     def add_task(self, version_number: int, task: Awaitable):
         """Add a verification task to be tracked."""
         self.done.clear()
-        task = create_task(task)
+        task = ensure_future(task)
         self.pending[task] = version_number
         task.add_done_callback(self._handle_callback)
 
@@ -170,12 +214,12 @@ class VerifyTasks:
         """Allow awaiting the task collection."""
         return self.done.wait().__await__()
 
-    def _handle_callback(self, task: Task):
+    def _handle_callback(self, future: Future):
         """Handle a task callback."""
-        version_number = self.pending.pop(task, None)
+        version_number = self.pending.pop(future, None)
         if not version_number:
             raise KeyError("Received callback for unscheduled task")
-        exc = task.exception()
+        exc = future.exception()
         if exc:
             self.add_failure(version_number, exc)
         if not self.pending:
@@ -208,7 +252,7 @@ class DidResolver:
                 or exactly matching the requested versionTime
         """
         try:
-            res = await self.resolve_state(
+            (state, doc_meta) = await self.resolve_state(
                 document_id,
                 source,
                 version_id=version_id,
@@ -217,26 +261,31 @@ class DidResolver:
             )
         except AsyncTextReadError as err:
             return ResolutionResult(
-                resolution_metadata=ResolutionError(
-                    "notFound", f"History resolution error: {str(err)}"
-                ).serialize()
+                resolution_metadata=ResolutionError.not_found(
+                    ProblemDetails(
+                        type="#missing-log",
+                        title="Missing log",
+                        detail=f"History resolution error: {str(err)}",
+                    ),
+                )
             )
-        except ValueError as err:
-            return ResolutionResult(
-                resolution_metadata=ResolutionError("invalidDid", str(err)).serialize()
-            )
-
-        if res is None:
-            return ResolutionResult(
-                resolution_metadata=ResolutionError("notFound", "Not found").serialize()
-            )
-        (state, doc_meta) = res
+        except ResolutionError as err:
+            return ResolutionResult(resolution_metadata=err)
 
         if state.document_id != document_id:
             res_result = ResolutionResult(
-                resolution_metadata=ResolutionError(
-                    "invalidDid", f"Document @id mismatch, expected '{document_id}'"
-                ).serialize()
+                resolution_metadata=ResolutionError.invalid_did(
+                    ProblemDetails(
+                        type="#did-log-id-mismatch",
+                        title="Document ID mismatch",
+                        detail=(
+                            "A DID Log File was found, but the id in the DID Document"
+                            " does not match the DID being resolved."
+                        ),
+                        found=state.document_id,
+                        expected=document_id,
+                    ),
+                )
             )
         else:
             res_result = ResolutionResult(
@@ -253,25 +302,27 @@ class DidResolver:
         version_number: int | str | None = None,
         version_time: str | datetime | None = None,
         verify_witness: bool = True,
-    ) -> tuple[DocumentState, DocumentMetadata] | None:
+    ) -> tuple[DocumentState, DocumentMetadata]:
         """Resolve a specific document state and document metadata."""
-        created = None
-        prev_state = None
-        state = None
-        next_state = None
-        aborted_err = None
-        found = None
-        line_no = 0
-        version_ids = []
+        aborted_err: ResolutionError | None = None
+        created: datetime | None = None
+        found: DocumentState | None = None
+        prev_state: DocumentState | None = None
+        state: DocumentState | None = None
+        next_state: DocumentState | None = None
+        line_no: int = 0
+        version_ids: list[str] = []
         verify_tasks = VerifyTasks()
-        witness_checks = {}
-        witness_load_task = None
+        witness_checks: dict[WitnessRule, int] = {}
+        witness_load_task: Future | None = None
 
         if isinstance(version_time, str):
             try:
                 version_time = make_timestamp(version_time)[0]
             except ValueError:
-                return None
+                raise ResolutionError.not_found(
+                    ProblemDetails.invalid_resolution_parameter("Invalid `versionTime`"),
+                ) from None
 
         if isinstance(version_number, str):
             if not version_number:
@@ -282,7 +333,11 @@ class DidResolver:
                 except ValueError:
                     version_number = None
                 if not version_number:
-                    return None
+                    raise ResolutionError.not_found(
+                        ProblemDetails.invalid_resolution_parameter(
+                            "Invalid `versionNumber`"
+                        ),
+                    )
         else:
             version_number = None
 
@@ -295,12 +350,16 @@ class DidResolver:
                 except ValueError:
                     vnum = None
                 if not vnum:
-                    return None  # "Invalid `versionId`"
+                    raise ResolutionError.not_found(
+                        ProblemDetails.invalid_resolution_parameter(
+                            "Invalid `versionId`"
+                        ),
+                    ) from None
                 if not version_number:
                     version_number = vnum
 
         async with source.resolve_entry_log(document_id) as entry_log:
-            while not aborted_err:
+            while not aborted_err and not verify_tasks.failed:
                 prev_state = state
                 state = next_state
                 next_state = None
@@ -308,20 +367,12 @@ class DidResolver:
                 try:
                     line_no += 1
                     line = await anext(entry_log)
-                    try:
-                        parts = json.loads(line)
-                    except ValueError as e:
-                        raise ValueError(
-                            f"Invalid history JSON on line {line_no}: {e}"
-                        ) from None
-
-                    # may raise ValueError
-                    next_state = DocumentState.load_history_line(parts, state)
+                    next_state = DocumentState.load_history_json(line, state)
                     next_state.check_version_id()
                 except StopAsyncIteration:
                     pass
-                except ValueError as e:
-                    aborted_err = e
+                except InvalidDocumentState as err:
+                    aborted_err = ResolutionError.invalid_did(err.problem_details)
                     next_state = None
 
                 if not state:
@@ -332,30 +383,37 @@ class DidResolver:
                     if version_number:
                         if state.version_number == version_number:
                             if version_time and state.timestamp > version_time:
-                                # "Specified `versionId` not valid at `versionTime`"
-                                return None
+                                raise ResolutionError.not_found(
+                                    ProblemDetails.invalid_resolution_parameter(
+                                        "Specified `versionId` not valid at `versionTime`"
+                                    ),
+                                )
                             if version_id is not None and state.version_id != version_id:
-                                # "`versionId` mismatch with specified `versionNumber`"
-                                return None
+                                raise ResolutionError.not_found(
+                                    ProblemDetails.invalid_resolution_parameter(
+                                        "`versionId` mismatch with `versionNumber`"
+                                    ),
+                                )
                             found = state
                     elif version_time and (
                         (next_state and next_state.timestamp > version_time)
                         or (not next_state and not aborted_err)
                     ):
                         if state.timestamp > version_time:
-                            # "Resolved version not valid at specified `versionTime`"
-                            return None
+                            raise ResolutionError.not_found(
+                                ProblemDetails.invalid_resolution_parameter(
+                                    "Resolved version not valid at `versionTime`"
+                                ),
+                            )
                         found = state
 
                 try:
                     verify = self.verifier.verify_state(state, prev_state, not next_state)
-                except ValueError as err:
+                except InvalidDocumentState as err:
                     verify_tasks.add_failure(state.version_number, err)
                 else:
                     if isawaitable(verify):
-                        verify_tasks.add_task(
-                            state.version_number, _check_proof(verify, state.version_id)
-                        )
+                        verify_tasks.add_task(state.version_number, verify)
                 version_ids.append(state.version_id)
 
                 if (
@@ -366,7 +424,7 @@ class DidResolver:
                 ):
                     witness_checks[witness_rule] = state.version_number
                     if not witness_load_task:
-                        witness_load_task = create_task(
+                        witness_load_task = ensure_future(
                             self.load_witness_log(document_id, source),
                         )
 
@@ -377,13 +435,18 @@ class DidResolver:
 
         if not found:
             if aborted_err:
-                # cannot resolve latest state
                 raise aborted_err
             if not state:
-                return None  # Empty document history
+                raise ResolutionError.not_found(
+                    ProblemDetails(
+                        type="#missing-log",
+                        title="Missing log",
+                        detail="Empty document history",
+                    ),
+                )
             if version_id or version_number or version_time:
-                return None
-                # may adjust error to f"Cannot resolve `versionId`: {version_id}")
+                # FIXME may adjust problem details based on request parameters
+                raise ResolutionError.not_found()
             found = state
 
         # collect all verification results
@@ -395,7 +458,7 @@ class DidResolver:
             failed_ver = failed_numbers.pop(0)
             failed_errs = verify_tasks.failed[failed_ver]
             if failed_ver <= found.version_number:
-                raise failed_errs[0]
+                raise ResolutionError.invalid_did(failed_errs[0].problem_details)
             else:
                 # FIXME add failed version info to resolution metadata
                 # adjust 'updated'?
@@ -410,15 +473,24 @@ class DidResolver:
                 # FIXME add failed check to resolution metadata
                 valid = checks.verify(validated, at_version=found.version_number)
             if not valid:
-                raise ValueError("Witness verification failed")
+                raise ResolutionError.invalid_did(
+                    ProblemDetails(
+                        type="#witness-verification-failed",
+                        title="Insufficient witness proofs.",
+                    ),
+                )
 
         doc_meta = DocumentMetadata(
             created=created,
             updated=state.timestamp,
             deactivated=found.deactivated,
+            portable=found.portable,
+            scid=found.scid,
             version_id=found.version_id,
             version_number=found.version_number,
             version_time=found.timestamp,
+            watchers=found.watchers,
+            witness=found.witness,
         )
         return found, doc_meta
 
@@ -451,13 +523,6 @@ def _add_ref(doc_id: str, node: dict, refmap: dict, all: set):
         raise ValueError(f"Duplicate reference: {reft}")
     all.add(reft)
     refmap[reft] = node
-
-
-async def _check_proof(verify: Awaitable[None], version_id: str):
-    try:
-        await verify
-    except ValueError as err:
-        raise ValueError(f"Error verifying proof for versionId '{version_id}'") from err
 
 
 def reference_map(document: dict) -> dict[str, dict]:
@@ -508,14 +573,16 @@ def dereference_fragment(document: dict, reft: str) -> DereferencingResult:
             if reft in blk:
                 res = deepcopy(blk[reft])
                 break
-    except ValueError as err:
+    except ValueError:
         return DereferencingResult(
-            dereferencing_metadata=ResolutionError("notFound", str(err)).serialize(),
+            dereferencing_metadata=ResolutionError.not_found(
+                # str(err)
+            ).serialize(),
         )
     if not res:
         return DereferencingResult(
-            dereferencing_metadata=ResolutionError(
-                "notFound", f"Reference not found: {reft}"
+            dereferencing_metadata=ResolutionError.not_found(
+                # f"Reference not found: {reft}"
             ).serialize()
         )
     ctx = []

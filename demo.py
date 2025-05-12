@@ -114,9 +114,7 @@ async def demo(
             **(params or {}),
             "witness": {
                 "threshold": 2,
-                "witnesses": [
-                    {"id": _format_did_key(w), "weight": 1} for w in witness_keys
-                ],
+                "witnesses": [{"id": _format_did_key(w)} for w in witness_keys],
             },
         }
     (doc_dir, state, genesis_key) = await auto_provision_did(
@@ -130,6 +128,7 @@ async def demo(
     )
     print(f"Provisioned DID: {state.document_id} in {doc_dir.name}")
     log_document_state(doc_dir, state)
+    version_ids = [state.version_id]
     created = state.timestamp
     did_url = DIDUrl.decode(state.document_id)
     domain_path = DomainPath.parse_identifier(did_url.identifier)
@@ -169,17 +168,21 @@ async def demo(
     )
     write_document_state(doc_dir, state)
     log_document_state(doc_dir, state)
+    version_ids.append(state.version_id)
     print(f"Wrote version {state.version_id}")
 
     # output witness proofs
     if witness:
-        proof_data = {"versionId": state.version_id}
-        proof_data["proof"] = [
-            di_jcs_sign(proof_data, w)
-            for w in witness_keys[:2]  # signing with 2/3 keys
-        ]
+        proofs = []
+        for vid in version_ids[-2:]:
+            proof_data = {"versionId": vid}
+            proof_data["proof"] = [
+                di_jcs_sign(proof_data, w)
+                for w in witness_keys[:2]  # signing with 2/3 keys
+            ]
+            proofs.append(proof_data)
         with open(doc_dir.joinpath(WITNESS_FILENAME), "w") as out:
-            out.write(json.dumps([proof_data], indent=2))
+            out.write(json.dumps(proofs, indent=2))
             out.write("\n")
         print(f"Wrote {WITNESS_FILENAME}")
 
@@ -218,18 +221,22 @@ async def demo(
                 state, update_key, document=doc, params_update=params_update
             )
             write_document_state(doc_dir, state)
+            version_ids.append(state.version_id)
         dur = perf_counter() - start
         print(f"Update duration: {dur:0.2f}")
 
         # output witness proofs
         if witness:
-            proof_data = {"versionId": state.version_id}
-            proof_data["proof"] = [
-                di_jcs_sign(proof_data, w)
-                for w in witness_keys[:2]  # signing with 2/3 keys
-            ]
+            proofs = []
+            for vid in version_ids[-2:]:
+                proof_data = {"versionId": vid}
+                proof_data["proof"] = [
+                    di_jcs_sign(proof_data, w)
+                    for w in witness_keys[:2]  # signing with 2/3 keys
+                ]
+                proofs.append(proof_data)
             with open(doc_dir.joinpath(WITNESS_FILENAME), "w") as out:
-                out.write(json.dumps([proof_data], indent=2))
+                out.write(json.dumps(proofs, indent=2))
                 out.write("\n")
             print(f"Wrote {WITNESS_FILENAME}")
 

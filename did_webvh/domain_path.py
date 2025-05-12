@@ -40,7 +40,7 @@ class DomainPath:
         """Parse a domain and path in identifier format (scid:domain%3Aport:path)."""
         scid, *id_parts = doc_id.split(":")
         if not id_parts:
-            raise ValueError("Invalid identifier")
+            raise ValueError("Invalid method-specific ID")
         host = urllib.parse.unquote(id_parts[0])
         if ":" in host:
             host, port_str = host.split(":", 1)
