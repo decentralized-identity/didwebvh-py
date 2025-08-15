@@ -36,10 +36,13 @@ class WitnessRule:
     witnesses: tuple[WitnessEntry]
 
     @classmethod
+    # TODO type return None or Witness rule
     def deserialize(cls, value) -> "WitnessRule":
         """Deserialize from a dictionary value."""
         if not isinstance(value, dict):
             raise ValueError("Invalid 'witness' value, expected object")
+        if value == {}:
+            return None
         threshold = None
         witnesses = None
         for k, v in value.items():
@@ -94,9 +97,9 @@ class WitnessChecks:
             if total < rule.threshold:
                 return False
         # latest rule has stricter validation
-        if latest_rule:
-            if not at_version:
-                at_version = len(self.versions)
+        if not at_version:
+            at_version = len(self.versions)
+        if latest_rule and latest_ver >= at_version:
             total = 0
             for entry in latest_rule.witnesses:
                 if entry.id in validated:

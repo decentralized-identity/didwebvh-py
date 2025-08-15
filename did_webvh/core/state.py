@@ -629,8 +629,9 @@ class DocumentState:
     def _update_params(cls, old_params: dict, new_params: dict) -> dict:
         res = old_params.copy()
         for param, pvalue in new_params.items():
+            res[param] = pvalue
             if param == "deactivated":
-                if pvalue not in (None, True, False):
+                if pvalue not in (True, False):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_parameter(
                             "Unsupported value for 'deactivated' parameter", found=pvalue
@@ -644,10 +645,7 @@ class DocumentState:
                         )
                     )
             elif param == "nextKeyHashes":
-                if pvalue is not None and (
-                    not isinstance(pvalue, list)
-                    or not all(isinstance(k, str) for k in pvalue)
-                ):
+                if  not isinstance(pvalue, list) or not all(isinstance(k, str) for k in pvalue):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_parameter(
                             "Unsupported value for 'nextKeyHashes' parameter",
@@ -690,10 +688,7 @@ class DocumentState:
                         )
                     )
             elif param == "updateKeys":
-                if pvalue is not None and (
-                    not isinstance(pvalue, list)
-                    or not all(isinstance(k, str) for k in pvalue)
-                ):
+                if not isinstance(pvalue, list) or not all(isinstance(k, str) for k in pvalue):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_parameter(
                             "Unsupported value for 'updateKeys' parameter",
@@ -701,10 +696,7 @@ class DocumentState:
                         )
                     )
             elif param == "watchers":
-                if pvalue is not None and (
-                    not isinstance(pvalue, list)
-                    or not all(isinstance(k, str) for k in pvalue)
-                ):
+                if not isinstance(pvalue, list) or not all(isinstance(k, str) for k in pvalue):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_parameter(
                             "Unsupported value for 'watchers' parameter",
@@ -712,28 +704,21 @@ class DocumentState:
                         )
                     )
             elif param == "witness":
-                if pvalue is not None:
-                    try:
-                        WitnessRule.deserialize(pvalue)
-                    except ValueError as err:
-                        raise InvalidDocumentState(
-                            ProblemDetails.invalid_parameter(
-                                str(err),
-                                found=pvalue,
-                            )
-                        ) from None
+                try:
+                    WitnessRule.deserialize(pvalue)
+                except ValueError as err:
+                    raise InvalidDocumentState(
+                        ProblemDetails.invalid_parameter(
+                            str(err),
+                            found=pvalue,
+                        )
+                    ) from None
             else:
                 raise InvalidDocumentState(
                     ProblemDetails.invalid_parameter(
                         f"Unsupported parameter: {param!r}",
                     )
                 )
-
-            if pvalue is None:
-                if param in res:
-                    del res[param]
-            else:
-                res[param] = pvalue
         return res
 
 
