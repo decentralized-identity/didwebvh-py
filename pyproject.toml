@@ -1,6 +1,6 @@
 [project]
 name = "did-webvh"
-version = "1.0.0rc0"
+version = "1.0.0"
 description = "This repository includes Python libraries for working with `did:webvh` (did:web + Verified History) DID documents and the underlying log format."
 authors = []
 license = "Apache-2.0"
