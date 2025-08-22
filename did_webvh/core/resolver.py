@@ -415,12 +415,10 @@ class DidResolver:
                     if isawaitable(verify):
                         verify_tasks.add_task(state.version_number, verify)
                 version_ids.append(state.version_id)
-
                 if (
                     verify_witness
-                    and (witness_rule := state.witness_rule)
+                    and (witness_rule := (prev_state or state).witness_rule)
                     and witness_rule.threshold != 0
-                    and witness_rule not in witness_checks
                 ):
                     witness_checks[witness_rule] = state.version_number
                     if not witness_load_task:
@@ -451,7 +449,6 @@ class DidResolver:
 
         # collect all verification results
         await verify_tasks
-
         if verify_tasks.failed:
             failed_numbers = list(verify_tasks.failed.keys())
             failed_numbers.sort()
