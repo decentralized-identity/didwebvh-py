@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from json import JSONDecodeError
@@ -449,3 +450,111 @@ def test_verify_state_proofs(mock_document_state, mock_next_sk):
     ]
     with pytest.raises(ValueError):
         verify_state_proofs(state=current_state, prev_state=prev_state)
+
+
+def test_empty_next_key_hashes_is_equivalent_to_missing():
+    """nextKeyHashes: [] from the TS reference generator must resolve without error.
+
+    The TypeScript reference implementation currently serialises nextKeyHashes: []
+    when no pre-rotation keys are specified. Per the spec, an empty array is
+    semantically equivalent to the field being absent — both mean no pre-rotation
+    commitment is made. This behaviour is acceptable and handled here, but the TS
+    generator is expected to stop emitting the field entirely in a future release.
+    This test should remain in case others decide to use this behaviour.
+
+    The log below is a real TS-generated two-entry DID log; both entries carry
+    nextKeyHashes: [] (as well as watchers: [] and witness: {}, also emitted
+    by the TS generator for absent optional fields).
+    """
+    # fmt: off
+    log_entries = [
+        {
+            "versionId": "1-QmPFhMuZH9gjY2JZgyyrgRuFTywQ4mDhoKGVoGE8uy7hFD",
+            "versionTime": "2000-01-01T00:00:00Z",
+            "parameters": {
+                "method": "did:webvh:1.0",
+                "scid": "Qmdxt11AjZewCNXX69bpEDobgjySeZ7eFwjf4tgpF6p2Dg",
+                "updateKeys": ["z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG"],
+                "portable": False,
+                "nextKeyHashes": [],
+                "watchers": [],
+                "witness": {},
+                "deactivated": False,
+            },
+            "state": {
+                "@context": [
+                    "https://www.w3.org/ns/did/v1",
+                    "https://w3id.org/security/multikey/v1",
+                ],
+                "id": "did:webvh:Qmdxt11AjZewCNXX69bpEDobgjySeZ7eFwjf4tgpF6p2Dg:example.com",
+                "controller": "did:webvh:Qmdxt11AjZewCNXX69bpEDobgjySeZ7eFwjf4tgpF6p2Dg:example.com",
+                "verificationMethod": [{
+                    "type": "Multikey",
+                    "publicKeyMultibase": "z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG",
+                    "purpose": "authentication",
+                    "id": "did:webvh:Qmdxt11AjZewCNXX69bpEDobgjySeZ7eFwjf4tgpF6p2Dg:example.com#P5RDjVJG",
+                }],
+                "authentication": ["did:webvh:Qmdxt11AjZewCNXX69bpEDobgjySeZ7eFwjf4tgpF6p2Dg:example.com#P5RDjVJG"],
+                "assertionMethod": [],
+                "keyAgreement": [],
+                "capabilityDelegation": [],
+                "capabilityInvocation": [],
+            },
+            "proof": [{
+                "type": "DataIntegrityProof",
+                "cryptosuite": "eddsa-jcs-2022",
+                "verificationMethod": "did:key:z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG#z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG",
+                "created": "2000-01-01T00:00:00Z",
+                "proofPurpose": "assertionMethod",
+                "proofValue": "z3gfipj528cwTsP7aSSWMsPzA5uqSUGSN7WNzJQFf1WTvjpHf9Ftjk6StQmqqzjyjQT9xyqTjEsRp2jw4DBjcyqac",
+            }],
+        },
+        {
+            "versionId": "2-QmXbbxspnFjjt5FX9QEdn8C6D8FZJsFceQdoHFTx89fyT4",
+            "versionTime": "2000-01-02T00:00:00Z",
+            "parameters": {
+                "updateKeys": ["z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG"],
+                "nextKeyHashes": [],
+                "witness": {},
+                "watchers": [],
+            },
+            "state": {
+                "@context": [
+                    "https://www.w3.org/ns/did/v1",
+                    "https://w3id.org/security/multikey/v1",
+                ],
+                "id": "did:webvh:Qmdxt11AjZewCNXX69bpEDobgjySeZ7eFwjf4tgpF6p2Dg:example.com",
+                "controller": "did:webvh:Qmdxt11AjZewCNXX69bpEDobgjySeZ7eFwjf4tgpF6p2Dg:example.com",
+                "verificationMethod": [{
+                    "type": "Multikey",
+                    "publicKeyMultibase": "z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG",
+                    "purpose": "authentication",
+                    "id": "did:webvh:Qmdxt11AjZewCNXX69bpEDobgjySeZ7eFwjf4tgpF6p2Dg:example.com#P5RDjVJG",
+                }],
+                "authentication": ["did:webvh:Qmdxt11AjZewCNXX69bpEDobgjySeZ7eFwjf4tgpF6p2Dg:example.com#P5RDjVJG"],
+                "assertionMethod": [],
+                "keyAgreement": [],
+                "capabilityDelegation": [],
+                "capabilityInvocation": [],
+                "alsoKnownAs": ["did:web:example.com"],
+            },
+            "proof": [{
+                "type": "DataIntegrityProof",
+                "cryptosuite": "eddsa-jcs-2022",
+                "verificationMethod": "did:key:z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG#z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG",
+                "created": "2000-01-02T00:00:00Z",
+                "proofPurpose": "assertionMethod",
+                "proofValue": "z53PwdwPmSpQoRkumzCVS2buqmTA6GoqaeEyQXJmDPG6diKnctCpcepx8e9NEEobynmM51HMg33kMYPPPWX21rPoy",
+            }],
+        },
+    ]
+    # fmt: on
+
+    prev_state = None
+    for entry in log_entries:
+        state = DocumentState.load_history_json(json.dumps(entry), prev_state)
+        assert state.next_key_hashes is None
+        verify_state_proofs(state=state, prev_state=prev_state)
+        prev_state = state
+
+    assert prev_state.version_number == 2

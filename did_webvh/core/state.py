@@ -221,7 +221,8 @@ class DocumentState:
 
     def _check_key_rotation(self):
         last_key_hashes = self.last_key_hashes
-        if last_key_hashes is None:
+        # Empty list is semantically equivalent to missing (no pre-rotation commitment)
+        if last_key_hashes is None or last_key_hashes == []:
             return
 
         if not isinstance(last_key_hashes, list) or not all(
@@ -543,17 +544,21 @@ class DocumentState:
     def next_key_hashes(self) -> list[str] | None:
         """Fetch a list of the `nextKeyHashes` entries from the parameters."""
         next_keys = self.params.get("nextKeyHashes")
-        if next_keys is not None and (
-            not isinstance(next_keys, list)
-            or not next_keys
-            or not all(isinstance(k, str) for k in next_keys)
-        ):
+        # Empty list is semantically equivalent to missing/null (no pre-rotation commitment)
+        if next_keys is not None and not isinstance(next_keys, list):
             raise InvalidDocumentState(
                 ProblemDetails.invalid_parameter(
                     "Invalid 'nextKeyHashes' parameter: expected list of strings"
                 )
             )
-        return next_keys
+        if next_keys is not None and not all(isinstance(k, str) for k in next_keys):
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_parameter(
+                    "Invalid 'nextKeyHashes' parameter: expected list of strings"
+                )
+            )
+        # Return None for empty list to treat it as equivalent to missing
+        return next_keys if next_keys else None
 
     @property
     def watchers(self) -> list | None:
@@ -645,7 +650,10 @@ class DocumentState:
                         )
                     )
             elif param == "nextKeyHashes":
-                if  not isinstance(pvalue, list) or not all(isinstance(k, str) for k in pvalue):
+                # Empty list is semantically equivalent to missing/null
+                if pvalue == []:
+                    continue
+                if not isinstance(pvalue, list) or not all(isinstance(k, str) for k in pvalue):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_parameter(
                             "Unsupported value for 'nextKeyHashes' parameter",
