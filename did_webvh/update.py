@@ -13,7 +13,7 @@ from .askar import AskarSigningKey
 from .const import ASKAR_STORE_FILENAME, DOCUMENT_FILENAME, HISTORY_FILENAME
 from .core.state import DocumentState
 from .core.types import SigningKey
-from .history import load_local_history
+from .history import load_local_history, write_document_state
 
 
 async def auto_update_did(
@@ -77,11 +77,7 @@ async def update_did(
         raise ValueError("There are no document or parameter updates to apply")
     # FIXME check that the signing key is present in the updateKeys
     state.proofs.append(state.create_proof(sk, timestamp=state.timestamp))
-    with open(history_path, "a") as out:
-        print(
-            json.dumps(state.history_line()),
-            file=out,
-        )
+    write_document_state(history_path.parent, state)
     return state
 
 
