@@ -565,14 +565,14 @@ def test_empty_next_key_hashes_is_equivalent_to_missing():
     assert prev_state.version_number == 2
 
 
-def test_check_version_time_strict_skew_optional(mock_document_state):
+def test_check_version_time_enforce_future_skew_optional(mock_document_state):
     fixed_now = datetime(2024, 9, 11, 17, 29, 32, tzinfo=timezone.utc)
     future = fixed_now + timedelta(hours=1)
     state = mock_document_state
     state.timestamp = future
     state.timestamp_raw = "2024-09-11T18:29:32Z"
 
-    check_version_time(state, None, strict_skew=False, now=fixed_now)
+    check_version_time(state, None, enforce_future_skew=False, now=fixed_now)
 
     with pytest.raises(InvalidDocumentState, match="5 minutes in the future"):
-        check_version_time(state, None, strict_skew=True, now=fixed_now)
+        check_version_time(state, None, enforce_future_skew=True, now=fixed_now)

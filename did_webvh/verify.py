@@ -13,9 +13,16 @@ from .domain_path import DomainPath
 class WebvhVerifier(HistoryVerifier):
     """`HistoryVerifier` for the webvh method."""
 
-    def __init__(self, verify_proofs: bool = True, *, strict_skew: bool = False):
-        """Constructor."""
-        super().__init__(verify_proofs, strict_skew=strict_skew)
+    def __init__(self, verify_proofs: bool = True, *, enforce_future_skew: bool = False):
+        """Constructor.
+
+        Args:
+            verify_proofs: Verify Data Integrity proofs on each log entry.
+            enforce_future_skew: When True, reject ``versionTime`` more than
+                five minutes in the future (spec SHOULD). Default False because
+                that tolerance is not a MUST.
+        """
+        super().__init__(verify_proofs, enforce_future_skew=enforce_future_skew)
 
     def verify_state(
         self, state: DocumentState, prev_state: DocumentState | None, is_final: bool

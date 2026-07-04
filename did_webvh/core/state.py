@@ -742,10 +742,15 @@ def check_version_time(
     state: DocumentState,
     prev_state: DocumentState | None,
     *,
-    strict_skew: bool = False,
+    enforce_future_skew: bool = False,
     now: datetime | None = None,
 ) -> None:
-    """Verify versionTime is present and monotonic across log entries."""
+    """Verify versionTime is present and monotonic across log entries.
+
+    Monotonic ordering is always enforced. When ``enforce_future_skew`` is
+    True, also reject ``versionTime`` more than five minutes after ``now``
+    (did:webvh v1.0 SHOULD for resolver clock-skew tolerance).
+    """
     if not state.timestamp_raw:
         raise InvalidDocumentState(
             ProblemDetails.invalid_log_entry(
@@ -754,9 +759,7 @@ def check_version_time(
             )
         )
 
-    if strict_skew:
-        # Spec SHOULD: reject versionTime more than ~5 minutes in the future.
-        # Off by default because the tolerance is not a MUST.
+    if enforce_future_skew:
         now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
         if now.tzinfo is None:
             now = now.replace(tzinfo=timezone.utc)

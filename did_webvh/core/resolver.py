@@ -161,16 +161,23 @@ class LocalHistoryResolver(HistoryResolver):
 class HistoryVerifier:
     """Generic DID verifier class."""
 
-    def __init__(self, verify_proofs: bool = True, *, strict_skew: bool = False):
-        """Constructor."""
+    def __init__(self, verify_proofs: bool = True, *, enforce_future_skew: bool = False):
+        """Constructor.
+
+        Args:
+            verify_proofs: Verify Data Integrity proofs on each log entry.
+            enforce_future_skew: When True, reject ``versionTime`` more than
+                five minutes in the future (spec SHOULD). Default False because
+                that tolerance is not a MUST.
+        """
         self._verify_proofs = verify_proofs
-        self._strict_skew = strict_skew
+        self._enforce_future_skew = enforce_future_skew
 
     def verify_state(
         self, state: DocumentState, prev_state: DocumentState | None, is_final: bool
     ) -> Awaitable[None] | None:
         """Verify a document state."""
-        check_version_time(state, prev_state, strict_skew=self._strict_skew)
+        check_version_time(state, prev_state, enforce_future_skew=self._enforce_future_skew)
         if (
             prev_state
             and prev_state.document_id != state.document_id
