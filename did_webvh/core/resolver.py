@@ -161,15 +161,16 @@ class LocalHistoryResolver(HistoryResolver):
 class HistoryVerifier:
     """Generic DID verifier class."""
 
-    def __init__(self, verify_proofs: bool = True):
+    def __init__(self, verify_proofs: bool = True, *, strict_skew: bool = False):
         """Constructor."""
         self._verify_proofs = verify_proofs
+        self._strict_skew = strict_skew
 
     def verify_state(
         self, state: DocumentState, prev_state: DocumentState | None, is_final: bool
     ) -> Awaitable[None] | None:
         """Verify a document state."""
-        check_version_time(state, prev_state)
+        check_version_time(state, prev_state, strict_skew=self._strict_skew)
         if (
             prev_state
             and prev_state.document_id != state.document_id

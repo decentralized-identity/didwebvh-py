@@ -13,9 +13,9 @@ from .domain_path import DomainPath
 class WebvhVerifier(HistoryVerifier):
     """`HistoryVerifier` for the webvh method."""
 
-    def __init__(self, verify_proofs: bool = True):
+    def __init__(self, verify_proofs: bool = True, *, strict_skew: bool = False):
         """Constructor."""
-        self._verify_proofs = verify_proofs
+        super().__init__(verify_proofs, strict_skew=strict_skew)
 
     def verify_state(
         self, state: DocumentState, prev_state: DocumentState | None, is_final: bool

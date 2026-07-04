@@ -1,13 +1,18 @@
 import json
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from json import JSONDecodeError
 
 import pytest
 
 from did_webvh.askar import AskarSigningKey
 from did_webvh.core.hash_utils import HashInfo
-from did_webvh.core.state import DocumentState, verify_state_proofs
+from did_webvh.core.state import (
+    DocumentState,
+    InvalidDocumentState,
+    check_version_time,
+    verify_state_proofs,
+)
 
 
 @pytest.fixture()
@@ -558,3 +563,16 @@ def test_empty_next_key_hashes_is_equivalent_to_missing():
         prev_state = state
 
     assert prev_state.version_number == 2
+
+
+def test_check_version_time_strict_skew_optional(mock_document_state):
+    fixed_now = datetime(2024, 9, 11, 17, 29, 32, tzinfo=timezone.utc)
+    future = fixed_now + timedelta(hours=1)
+    state = mock_document_state
+    state.timestamp = future
+    state.timestamp_raw = "2024-09-11T18:29:32Z"
+
+    check_version_time(state, None, strict_skew=False, now=fixed_now)
+
+    with pytest.raises(InvalidDocumentState, match="5 minutes in the future"):
+        check_version_time(state, None, strict_skew=True, now=fixed_now)

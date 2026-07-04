@@ -742,9 +742,10 @@ def check_version_time(
     state: DocumentState,
     prev_state: DocumentState | None,
     *,
+    strict_skew: bool = False,
     now: datetime | None = None,
 ) -> None:
-    """Verify versionTime is present, monotonic, and within future skew."""
+    """Verify versionTime is present and monotonic across log entries."""
     if not state.timestamp_raw:
         raise InvalidDocumentState(
             ProblemDetails.invalid_log_entry(
@@ -753,17 +754,20 @@ def check_version_time(
             )
         )
 
-    now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-
-    if state.timestamp > now + MAX_FUTURE_SKEW:
-        raise InvalidDocumentState(
-            ProblemDetails.invalid_log_entry(
-                f"versionTime for version '{state.version_number}' must not be more than 5 minutes in the future",
-                versionId=state.version_id,
+    if strict_skew:
+        # Spec SHOULD: reject versionTime more than ~5 minutes in the future.
+        # Off by default because the tolerance is not a MUST.
+        now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        if state.timestamp > now + MAX_FUTURE_SKEW:
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_log_entry(
+                    f"versionTime for version '{state.version_number}' must not be "
+                    f"more than 5 minutes in the future",
+                    versionId=state.version_id,
+                )
             )
-        )
 
     if prev_state and state.timestamp <= prev_state.timestamp:
         raise InvalidDocumentState(
