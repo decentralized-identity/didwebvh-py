@@ -220,7 +220,7 @@ async def demo(
             state = update_document_state(
                 state, update_key, document=doc, params_update=params_update
             )
-            write_document_state(doc_dir, state, entry_delay=0)
+            write_document_state(doc_dir, state)
             version_ids.append(state.version_id)
         dur = perf_counter() - start
         print(f"Update duration: {dur:0.2f}")

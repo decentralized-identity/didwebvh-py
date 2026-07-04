@@ -21,6 +21,7 @@ from .state import (
     DocumentMetadata,
     DocumentState,
     InvalidDocumentState,
+    check_version_time,
     verify_state_proofs,
 )
 from .witness import WitnessChecks, WitnessRule, verify_witness_proofs
@@ -168,6 +169,7 @@ class HistoryVerifier:
         self, state: DocumentState, prev_state: DocumentState | None, is_final: bool
     ) -> Awaitable[None] | None:
         """Verify a document state."""
+        check_version_time(state, prev_state)
         if (
             prev_state
             and prev_state.document_id != state.document_id

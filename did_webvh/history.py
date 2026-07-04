@@ -1,6 +1,5 @@
 """History file management."""
 
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -41,8 +40,6 @@ class WebvhHistoryResolver(HistoryResolver):
 def write_document_state(
     doc_dir: Path,
     state: DocumentState,
-    *,
-    entry_delay: float = 1.0,
 ):
     """Append a new document state to a history log file."""
     history_path = doc_dir.joinpath(HISTORY_FILENAME)
@@ -58,9 +55,6 @@ def write_document_state(
             state.history_json(),
             file=out,
         )
-
-    if entry_delay > 0:
-        time.sleep(entry_delay)
 
 
 def did_history_resolver(
