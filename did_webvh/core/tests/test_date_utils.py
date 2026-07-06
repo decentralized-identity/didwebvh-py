@@ -14,10 +14,10 @@ def test_create_next_version_time_uses_requested_when_later():
 
 
 def test_create_next_version_time_bumps_when_now_not_later():
-    future = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(hours=1)
-    previous_raw = future.isoformat().replace("+00:00", "Z")
+    previous = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(hours=1)
+    previous_raw = previous.isoformat().replace("+00:00", "Z")
     ts, raw = create_next_version_time(previous_raw)
-    assert ts == future + timedelta(seconds=1)
+    assert ts == previous + timedelta(seconds=1)
     assert raw == ts.isoformat().replace("+00:00", "Z")
 
 

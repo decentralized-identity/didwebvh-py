@@ -149,7 +149,9 @@ async def test_resolve_history_rejects_non_monotonic_version_time():
     )
     assert res.document is None
     assert res.resolution_metadata["error"] == "invalidDid"
-    assert "greater than previous entry time" in res.resolution_metadata["problemDetails"]["detail"]
+    assert res.resolution_metadata["problemDetails"]["detail"] == (
+        "versionTime for version '2' must be greater than previous entry time"
+    )
 
 
 async def test_resolve_history_failed_request():
