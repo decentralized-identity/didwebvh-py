@@ -98,8 +98,8 @@ async def test_resolve_history():
             "proof": [],
         },
         {
-            "versionId": "2-QmaofgPQBFQBEX9dFjsYsJXTgmMhZoEXwfNegVZ38rQ7YX",
-            "versionTime": "2025-01-20T23:46:33Z",
+            "versionId": "2-QmdFY1RaW7oKFewnFo1T9w6Y2nn5VSUGTYQYYF2wsEe9rE",
+            "versionTime": "2025-01-20T23:46:34Z",
             "parameters": {},
             "state": {"id": "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH"},
             "proof": [],
@@ -119,6 +119,38 @@ async def test_resolve_history():
     assert res.resolution_metadata["error"] == "invalidDid"
     assert res.resolution_metadata["problemDetails"]["type"].endswith(
         "#did-log-id-mismatch"
+    )
+
+
+async def test_resolve_history_rejects_non_monotonic_version_time():
+    HISTORY = [
+        {
+            "versionId": "1-QmV2AdEkGSvn3K5v7x73rFVMrhVxAUbDdPRhx2fmVRFpdE",
+            "versionTime": "2025-01-20T23:46:33Z",
+            "parameters": {
+                "method": "testmethod",
+                "scid": "QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH",
+            },
+            "state": {"id": "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH"},
+            "proof": [],
+        },
+        {
+            "versionId": "2-QmaofgPQBFQBEX9dFjsYsJXTgmMhZoEXwfNegVZ38rQ7YX",
+            "versionTime": "2025-01-20T23:46:33Z",
+            "parameters": {},
+            "state": {"id": "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH"},
+            "proof": [],
+        },
+    ]
+    history = MockHistoryResolver("\n".join(map(json.dumps, HISTORY)))
+    resolver = DidResolver(MockHistoryVerifier())
+    res = await resolver.resolve(
+        "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH", history
+    )
+    assert res.document is None
+    assert res.resolution_metadata["error"] == "invalidDid"
+    assert res.resolution_metadata["problemDetails"]["detail"] == (
+        "versionTime for version '2' must be greater than previous entry time"
     )
 
 

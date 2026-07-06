@@ -3,13 +3,18 @@
 import json
 from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import jsoncanon
 
 from ..const import METHOD_NAME, METHOD_VERSION, SCID_PLACEHOLDER
-from .date_utils import iso_format_datetime, make_timestamp
+from .date_utils import (
+    MAX_FUTURE_SKEW,
+    create_next_version_time,
+    iso_format_datetime,
+    make_timestamp,
+)
 from .hash_utils import DEFAULT_HASH, HashInfo
 from .problem_details import ProblemDetails
 from .proof import di_jcs_sign, di_jcs_verify, resolve_did_key
@@ -281,7 +286,10 @@ class DocumentState:
             params.update(params_update)
         else:
             params_update = {}
-        timestamp, timestamp_raw = make_timestamp(timestamp)
+        timestamp, timestamp_raw = create_next_version_time(
+            self.timestamp_raw,
+            timestamp,
+        )
         if isinstance(document, str):
             document = json.loads(document)
         else:
@@ -728,6 +736,49 @@ class DocumentState:
                     )
                 )
         return res
+
+
+def check_version_time(
+    state: DocumentState,
+    prev_state: DocumentState | None,
+    *,
+    enforce_future_skew: bool = False,
+    now: datetime | None = None,
+) -> None:
+    """Verify versionTime is present and monotonic across log entries.
+
+    Monotonic ordering is always enforced. When ``enforce_future_skew`` is
+    True, also reject ``versionTime`` more than five minutes after ``now``
+    (did:webvh v1.0 SHOULD for resolver clock-skew tolerance).
+    """
+    if not state.timestamp_raw:
+        raise InvalidDocumentState(
+            ProblemDetails.invalid_log_entry(
+                f"version '{state.version_number}' is missing versionTime",
+                versionId=state.version_id,
+            )
+        )
+
+    if enforce_future_skew:
+        now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        if state.timestamp > now + MAX_FUTURE_SKEW:
+            raise InvalidDocumentState(
+                ProblemDetails.invalid_log_entry(
+                    f"versionTime for version '{state.version_number}' must not be "
+                    f"more than 5 minutes in the future",
+                    versionId=state.version_id,
+                )
+            )
+
+    if prev_state and state.timestamp <= prev_state.timestamp:
+        raise InvalidDocumentState(
+            ProblemDetails.invalid_log_entry(
+                f"versionTime for version '{state.version_number}' must be greater than previous entry time",
+                versionId=state.version_id,
+            )
+        )
 
 
 def verify_state_proofs(state: DocumentState, prev_state: DocumentState | None):
