@@ -59,6 +59,14 @@ class WitnessRule:
         if not isinstance(witnesses, list):
             raise ValueError("Expected list for 'witnesses' in 'witness' value")
         witnesses = tuple(WitnessEntry.deserialize(w) for w in witnesses)
+        if witnesses and threshold < 1:
+            raise ValueError(
+                "Expected 'threshold' of at least 1 when 'witnesses' is non-empty"
+            )
+        if threshold > len(witnesses):
+            raise ValueError(
+                "Expected 'threshold' no greater than the number of 'witnesses'"
+            )
         return WitnessRule(threshold, witnesses)
 
 
