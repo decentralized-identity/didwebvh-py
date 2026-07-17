@@ -3,6 +3,7 @@
 from typing import Optional
 
 from aries_askar import Key, KeyAlg
+from aries_askar.error import AskarError
 
 from .core.multi_key import MultiKey
 from .core.types import SigningKey, VerifyingKey
@@ -85,7 +86,12 @@ class AskarSigningKey(AskarVerifyingKey, SigningKey):
     @classmethod
     def generate(cls, alg: str) -> "AskarSigningKey":
         """Generate a new, random signing key for a given key algorithm."""
-        return AskarSigningKey(Key.generate(alg))
+        try:
+            return AskarSigningKey(Key.generate(alg))
+        except AskarError as exc:
+            if "unknown key algorithm" in str(exc).lower():
+                raise TypeError(f"Unsupported key type: {alg}") from exc
+            raise
 
     def sign_message(self, message: bytes) -> bytes:
         """Sign a message with this key, producing a new signature."""
