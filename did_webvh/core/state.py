@@ -798,7 +798,21 @@ def verify_state_proofs(state: DocumentState, prev_state: DocumentState | None):
         update_keys = prev_state.update_keys
     for proof in proofs:
         method_id = proof.get("verificationMethod")
-        vmethod = resolve_did_key(method_id)
+        try:
+            vmethod = resolve_did_key(method_id)
+        except ValueError as err:
+            # resolve_did_key rejects a missing, relative, non-did:key, or fragment-mismatched
+            # verification method by raising ValueError. Outside this try it escaped
+            # verify_state_proofs uncaught, and callers reading `.problem_details` on it saw
+            # AttributeError instead of a verification failure.
+            raise InvalidDocumentState(
+                ProblemDetails(
+                    type="#proof-verification-failed",
+                    title="Proof verification failed",
+                    detail=str(err),
+                    versionId=state.version_id,
+                )
+            ) from None
         if vmethod["publicKeyMultibase"] not in update_keys:
             raise InvalidDocumentState(
                 ProblemDetails(

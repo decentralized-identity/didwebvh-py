@@ -576,3 +576,26 @@ def test_check_version_time_enforce_future_skew_optional(mock_document_state):
 
     with pytest.raises(InvalidDocumentState, match="5 minutes in the future"):
         check_version_time(state, None, enforce_future_skew=True, now=fixed_now)
+
+
+def test_verify_state_proofs_reports_a_mismatched_did_key():
+    """A did:key whose body and fragment name different keys is a verification failure.
+
+    `resolve_did_key` raises ValueError for a missing, relative, non-did:key or mismatched
+    verification method, and it was called outside the try that catches ValueError -- so the
+    exception escaped `verify_state_proofs` uncaught and callers reading `.problem_details` on it
+    saw AttributeError rather than a rejection they could report.
+    """
+    sk = AskarSigningKey.generate("ed25519")
+    other = AskarSigningKey.generate("ed25519")
+    state = DocumentState.initial(
+        {"updateKeys": [sk.multikey], "method": "did:webvh:1.0"},
+        {"@context": ["https://www.w3.org/ns/did/v1"], "id": "did:webvh:{SCID}:example.com"},
+    )
+    state.sign(sk)
+    # Body names the authorized key; fragment names a different one.
+    state.proofs[0]["verificationMethod"] = f"did:key:{sk.multikey}#{other.multikey}"
+
+    with pytest.raises(InvalidDocumentState) as raised:
+        verify_state_proofs(state, None)
+    assert raised.value.problem_details.type.endswith("#proof-verification-failed")
