@@ -243,3 +243,35 @@ def test_dereference_fragment():
     )
     assert isinstance(result, DereferencingResult)
     assert result.dereferencing_metadata.get("error") is not None
+
+
+async def test_resolve_history_terminates_on_an_empty_log():
+    """An empty entry log must report `#missing-log`, not spin.
+
+    `resolve_state` primes a two-line lookahead with `if not state: continue`. When the log holds
+    no entries, `state` is never assigned and `StopAsyncIteration` was swallowed by a bare `pass`,
+    so the loop could never reach the "Empty document history" handler that already sat below it.
+    A resolver fetching did.jsonl from a host that returns an empty body hung instead of failing.
+    """
+    resolver = DidResolver(MockHistoryVerifier())
+    result = await resolver.resolve(
+        "did:webvh:QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH:example.com",
+        MockHistoryResolver(""),
+    )
+    assert result.document is None
+    assert result.resolution_metadata["error"] == "notFound"
+    assert "missing-log" in result.resolution_metadata["problemDetails"]["type"]
+
+
+@pytest.mark.parametrize("blank", ["\n", "   \n\n"])
+async def test_resolve_history_terminates_on_a_whitespace_log(blank):
+    """A log of blank lines is malformed JSON Lines rather than an empty log, so `invalidDid` is
+    the right answer. What matters here is only that it is *an* answer: before the fix this input
+    reached the same non-terminating branch as a truly empty log."""
+    resolver = DidResolver(MockHistoryVerifier())
+    result = await resolver.resolve(
+        "did:webvh:QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH:example.com",
+        MockHistoryResolver(blank),
+    )
+    assert result.document is None
+    assert result.resolution_metadata["error"]
