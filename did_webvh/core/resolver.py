@@ -316,6 +316,7 @@ class DidResolver:
         """Resolve a specific document state and document metadata."""
         aborted_err: ResolutionError | None = None
         created: datetime | None = None
+        exhausted: bool = False
         found: DocumentState | None = None
         prev_state: DocumentState | None = None
         state: DocumentState | None = None
@@ -380,12 +381,18 @@ class DidResolver:
                     next_state = DocumentState.load_history_json(line, state)
                     next_state.check_version_id()
                 except StopAsyncIteration:
-                    pass
+                    exhausted = True
                 except InvalidDocumentState as err:
                     aborted_err = ResolutionError.invalid_did(err.problem_details)
                     next_state = None
 
                 if not state:
+                    if exhausted:
+                        # The log held no entries at all, so the two-line lookahead below never
+                        # primes and `state` can never become set. Without this the loop spins
+                        # forever; breaking here reaches the "Empty document history" handler
+                        # after the loop, which is what this case was always meant to report.
+                        break
                     # we initially loop twice so that the next line is available (if any)
                     continue
 
