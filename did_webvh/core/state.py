@@ -3,14 +3,14 @@
 import json
 from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jcs
 
 from ..const import METHOD_NAME, METHOD_VERSION, SCID_PLACEHOLDER
 from .date_utils import (
-    MAX_FUTURE_SKEW,
+    DEFAULT_FUTURE_SKEW,
     create_next_version_time,
     iso_format_datetime,
     make_timestamp,
@@ -647,7 +647,8 @@ class DocumentState:
                 if pvalue not in (True, False):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_parameter(
-                            "Unsupported value for 'deactivated' parameter", found=pvalue
+                            "Unsupported value for 'deactivated' parameter",
+                            found=pvalue,
                         )
                     )
             elif param == "method":
@@ -661,7 +662,9 @@ class DocumentState:
                 # Empty list is semantically equivalent to missing/null
                 if pvalue == []:
                     continue
-                if not isinstance(pvalue, list) or not all(isinstance(k, str) for k in pvalue):
+                if not isinstance(pvalue, list) or not all(
+                    isinstance(k, str) for k in pvalue
+                ):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_parameter(
                             "Unsupported value for 'nextKeyHashes' parameter",
@@ -704,7 +707,9 @@ class DocumentState:
                         )
                     )
             elif param == "updateKeys":
-                if not isinstance(pvalue, list) or not all(isinstance(k, str) for k in pvalue):
+                if not isinstance(pvalue, list) or not all(
+                    isinstance(k, str) for k in pvalue
+                ):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_parameter(
                             "Unsupported value for 'updateKeys' parameter",
@@ -712,7 +717,9 @@ class DocumentState:
                         )
                     )
             elif param == "watchers":
-                if not isinstance(pvalue, list) or not all(isinstance(k, str) for k in pvalue):
+                if not isinstance(pvalue, list) or not all(
+                    isinstance(k, str) for k in pvalue
+                ):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_parameter(
                             "Unsupported value for 'watchers' parameter",
@@ -742,14 +749,15 @@ def check_version_time(
     state: DocumentState,
     prev_state: DocumentState | None,
     *,
-    enforce_future_skew: bool = False,
-    now: datetime | None = None,
+    enforce_future_skew: bool = True,
+    future_skew: timedelta | None = None,
+    resolution_time: datetime | None = None,
 ) -> None:
-    """Verify versionTime is present and monotonic across log entries.
+    """Verify `versionTime` is present and monotonic across log entries.
 
-    Monotonic ordering is always enforced. When ``enforce_future_skew`` is
-    True, also reject ``versionTime`` more than five minutes after ``now``
-    (did:webvh v1.0 SHOULD for resolver clock-skew tolerance).
+    Monotonic ordering is always enforced. When `enforce_future_skew` is
+    True (the default), also reject `versionTime` more than `future_skew`
+    (default five minutes) after `resolution_time` (see `check_version_time_not_future`).
     """
     if not state.timestamp_raw:
         raise InvalidDocumentState(
@@ -760,17 +768,9 @@ def check_version_time(
         )
 
     if enforce_future_skew:
-        now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
-        if now.tzinfo is None:
-            now = now.replace(tzinfo=timezone.utc)
-        if state.timestamp > now + MAX_FUTURE_SKEW:
-            raise InvalidDocumentState(
-                ProblemDetails.invalid_log_entry(
-                    f"versionTime for version '{state.version_number}' must not be "
-                    f"more than 5 minutes in the future",
-                    versionId=state.version_id,
-                )
-            )
+        check_version_time_not_future(
+            state, future_skew=future_skew, resolution_time=resolution_time
+        )
 
     if prev_state and state.timestamp <= prev_state.timestamp:
         raise InvalidDocumentState(
@@ -779,6 +779,42 @@ def check_version_time(
                 versionId=state.version_id,
             )
         )
+
+
+def check_version_time_not_future(
+    state: DocumentState,
+    *,
+    future_skew: timedelta | None = None,
+    resolution_time: datetime | None = None,
+) -> None:
+    """Verify `versionTime` is not in the future.
+
+    Rejects a `versionTime` more than `future_skew` (default five minutes)
+    after `resolution_time` (default now), as required by did:webvh.
+    """
+    resolution_time = (resolution_time or datetime.now(timezone.utc)).replace(
+        microsecond=0
+    )
+    if resolution_time.tzinfo is None:
+        resolution_time = resolution_time.replace(tzinfo=timezone.utc)
+    if future_skew is None:
+        future_skew = DEFAULT_FUTURE_SKEW
+    if state.timestamp > resolution_time + future_skew:
+        raise InvalidDocumentState(
+            ProblemDetails.invalid_log_entry(
+                f"versionTime for version '{state.version_number}' must not be "
+                f"more than {_format_skew(future_skew)} in the future",
+                versionId=state.version_id,
+            )
+        )
+
+
+def _format_skew(skew: timedelta) -> str:
+    seconds = int(skew.total_seconds())
+    if seconds and seconds % 60 == 0:
+        minutes = seconds // 60
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+    return f"{seconds} second{'s' if seconds != 1 else ''}"
 
 
 def verify_state_proofs(state: DocumentState, prev_state: DocumentState | None):

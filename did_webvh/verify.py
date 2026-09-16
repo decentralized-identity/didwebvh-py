@@ -1,6 +1,7 @@
 """High-level document state verification."""
 
 from collections.abc import Awaitable
+from datetime import datetime, timedelta
 
 from .const import METHOD_NAME, METHOD_VERSION
 from .core.did_url import DIDUrl
@@ -13,16 +14,30 @@ from .domain_path import DomainPath
 class WebvhVerifier(HistoryVerifier):
     """`HistoryVerifier` for the webvh method."""
 
-    def __init__(self, verify_proofs: bool = True, *, enforce_future_skew: bool = False):
+    def __init__(
+        self,
+        verify_proofs: bool = True,
+        *,
+        enforce_future_skew: bool = True,
+        resolution_time: datetime | None = None,
+        future_skew: timedelta | None = None,
+    ):
         """Constructor.
 
         Args:
             verify_proofs: Verify Data Integrity proofs on each log entry.
-            enforce_future_skew: When True, reject ``versionTime`` more than
-                five minutes in the future (spec SHOULD). Default False because
-                that tolerance is not a MUST.
+            enforce_future_skew: Reject `versionTime` values in the future.
+            resolution_time: The time to check `versionTime` against. Defaults
+                to the time the verifier is created, see `HistoryVerifier`.
+            future_skew: Permitted clock skew for `versionTime` (default 5 minutes).
+
         """
-        super().__init__(verify_proofs, enforce_future_skew=enforce_future_skew)
+        super().__init__(
+            verify_proofs,
+            enforce_future_skew=enforce_future_skew,
+            resolution_time=resolution_time,
+            future_skew=future_skew,
+        )
 
     def verify_state(
         self, state: DocumentState, prev_state: DocumentState | None, is_final: bool
