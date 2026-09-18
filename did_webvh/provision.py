@@ -90,7 +90,12 @@ async def auto_provision_did(
 
 
 def encode_verification_method(vk: VerifyingKey, controller: str = None) -> dict:
-    """Format a verifiying key as a DID Document verification method."""
+    """Format a verifiying key as a DID Document verification method.
+
+    The `controller` property is required by DID Core. It is taken from the key
+    ID when that is an absolute DID URL, and from the `controller` argument when
+    the key ID is a bare fragment.
+    """
     keydef = {
         "type": "Multikey",
         "publicKeyMultibase": vk.multikey,
@@ -107,14 +112,20 @@ def encode_verification_method(vk: VerifyingKey, controller: str = None) -> dict
         raise RuntimeError("Missing fragment in verification method ID")
     elif fpos > 0:
         controller = kid[:fpos]
-    else:
-        controller = controller or ""
+    elif controller:
         kid = controller + kid
+    else:
+        raise ValueError(
+            "Missing controller for verification method with a relative key ID"
+        )
     return {"id": kid, "controller": controller, **keydef}
 
 
 def genesis_document(placeholder_id: str) -> dict:
     """Generate a standard genesis document from a set of verification keys.
+
+    The DID is its own controller by default; a document supplied by the DID
+    controller is never modified.
 
     The exact format of this document may change over time.
     """
@@ -122,6 +133,7 @@ def genesis_document(placeholder_id: str) -> dict:
     return {
         "@context": [DID_CONTEXT],
         "id": placeholder_id,
+        "controller": placeholder_id,
     }
 
 
