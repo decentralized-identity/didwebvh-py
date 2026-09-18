@@ -8,6 +8,7 @@ import pytest
 from did_webvh.askar import AskarSigningKey
 from did_webvh.core.hash_utils import HashInfo
 from did_webvh.core.state import (
+    DocumentMetadata,
     DocumentState,
     InvalidDocumentState,
     check_version_time,
@@ -599,3 +600,45 @@ def test_verify_state_proofs_reports_a_mismatched_did_key():
     with pytest.raises(InvalidDocumentState) as raised:
         verify_state_proofs(state, None)
     assert raised.value.problem_details.type.endswith("#proof-verification-failed")
+
+
+def _document_metadata(**kwargs) -> DocumentMetadata:
+    timestamp = datetime(2024, 9, 10, 18, 29, 27, tzinfo=timezone.utc)
+    return DocumentMetadata(
+        created=timestamp,
+        updated=timestamp,
+        scid="QmQcJ3rAQSyVCjA2P36RUcwf5bQ4ZAB5m9aieqKwWJb7me",
+        version_id="1-QmX9fVx3xDJVRY15c2zMvjQN7nKPp4hQsazbbDSGxMwRHG",
+        version_time=timestamp,
+        **kwargs,
+    )
+
+
+def test_metadata_witness_threshold_is_a_string():
+    witness = {
+        "threshold": 2,
+        "witnesses": [{"id": "did:key:z6Mkw1WDm8pd7vwdCBFPrX3VQHMeYcX2nnd9MNiwuHxaZPZ3"}],
+    }
+    serialized = _document_metadata(witness=witness).serialize()
+    assert serialized["witness"]["threshold"] == "2"
+    assert serialized["witness"]["witnesses"] == witness["witnesses"]
+    # the source rule is left untouched
+    assert witness["threshold"] == 2
+
+
+def test_metadata_reports_empty_watchers_and_witness():
+    serialized = _document_metadata().serialize()
+    assert serialized["watchers"] == []
+    assert serialized["witness"] == {}
+
+
+def test_metadata_keeps_configured_watchers():
+    serialized = _document_metadata(watchers=["https://watcher.example"]).serialize()
+    assert serialized["watchers"] == ["https://watcher.example"]
+
+
+def test_metadata_omits_version_number():
+    """`versionNumber` is not a did:webvh metadata property; `versionId` carries it."""
+    serialized = _document_metadata().serialize()
+    assert "versionNumber" not in serialized
+    assert serialized["versionId"].startswith("1-")
