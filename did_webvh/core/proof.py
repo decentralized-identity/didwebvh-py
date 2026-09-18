@@ -38,7 +38,7 @@ def di_jcs_sign(
     *,
     purpose: str = "assertionMethod",
     challenge: Optional[str] = None,
-    timestamp: Optional[datetime] = None,
+    timestamp: Optional[datetime | str] = None,
     kid: Optional[str] = None,
 ) -> dict:
     """Sign a dictionary value with a signing key."""

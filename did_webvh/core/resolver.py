@@ -26,6 +26,9 @@ from .state import (
 )
 from .witness import WitnessChecks, WitnessRule, verify_witness_proofs
 
+CONTENT_TYPE_DID_LD_JSON = "application/did+ld+json"
+"""The content type of a resolved DID document."""
+
 
 class ResolutionError(Exception):
     """An error raised during DID resolution."""
@@ -67,7 +70,7 @@ class ResolutionError(Exception):
         else:
             details = None
         return {
-            "contentType": "application/did+ld+json",
+            "contentType": CONTENT_TYPE_DID_LD_JSON,
             "error": self.error,
             **({"problemDetails": details} if details else {}),
         }
@@ -85,7 +88,7 @@ class ResolutionResult:
         self,
         document: Optional[dict] = None,
         document_metadata: Optional[dict] = None,
-        resolution_metadata: Optional[dict] = None,
+        resolution_metadata: Optional[dict | ResolutionError] = None,
     ):
         """Initializer."""
         super().__init__()
@@ -97,11 +100,15 @@ class ResolutionResult:
 
     def serialize(self) -> dict:
         """Serialize this result to a JSON-compatible dictionary."""
+        metadata = dict(self.resolution_metadata) if self.resolution_metadata else {}
+        if self.document is not None:
+            # per DID Core the resolution metadata must report the content type
+            # of a returned DID document
+            metadata.setdefault("contentType", CONTENT_TYPE_DID_LD_JSON)
         return {
-            "@context": "https://w3id.org/did-resolution/v1",
             "didDocument": self.document,
             "didDocumentMetadata": self.document_metadata,
-            "didResolutionMetadata": self.resolution_metadata,
+            "didResolutionMetadata": metadata,
         }
 
 
@@ -116,7 +123,6 @@ class DereferencingResult:
     def serialize(self) -> dict:
         """Serialize this result to a JSON-compatible dictionary."""
         return {
-            "@context": "https://w3id.org/did-resolution/v1",
             "dereferencingMetadata": self.dereferencing_metadata,
             "content": self.content,
             "contentMetadata": self.content_metadata or {},
@@ -356,7 +362,9 @@ class DidResolver:
                 version_time = make_timestamp(version_time)[0]
             except ValueError:
                 raise ResolutionError.not_found(
-                    ProblemDetails.invalid_resolution_parameter("Invalid `versionTime`"),
+                    ProblemDetails.invalid_resolution_parameter(
+                        "Invalid `versionTime`"
+                    ),
                 ) from None
 
         if isinstance(version_number, str):
@@ -429,7 +437,10 @@ class DidResolver:
                                         "Specified `versionId` not valid at `versionTime`"
                                     ),
                                 )
-                            if version_id is not None and state.version_id != version_id:
+                            if (
+                                version_id is not None
+                                and state.version_id != version_id
+                            ):
                                 raise ResolutionError.not_found(
                                     ProblemDetails.invalid_resolution_parameter(
                                         "`versionId` mismatch with `versionNumber`"
@@ -449,7 +460,9 @@ class DidResolver:
                         found = state
 
                 try:
-                    verify = self.verifier.verify_state(state, prev_state, not next_state)
+                    verify = self.verifier.verify_state(
+                        state, prev_state, not next_state
+                    )
                 except InvalidDocumentState as err:
                     verify_tasks.add_failure(state.version_number, err)
                 else:
@@ -507,7 +520,7 @@ class DidResolver:
             validated, _errs = await witness_load_task
             checks = WitnessChecks(rules=witness_checks, versions=version_ids)
             valid = checks.verify(validated)
-            if not valid and found.version_number < state.version_number:
+            if state and not valid and found.version_number < state.version_number:
                 # FIXME add failed check to resolution metadata
                 valid = checks.verify(validated, at_version=found.version_number)
             if not valid:
@@ -593,7 +606,9 @@ def normalize_services(document: dict) -> list[dict]:
         svcs = [svcs]
     for svc in svcs:
         if not isinstance(svc, dict):
-            raise ValueError("Expected map or list of map entries for 'service' property")
+            raise ValueError(
+                "Expected map or list of map entries for 'service' property"
+            )
         svc_id = svc.get("id")
         if not svc_id or not isinstance(svc_id, str) or "#" not in svc_id:
             raise ValueError(f"Invalid service entry id: {svc_id}")

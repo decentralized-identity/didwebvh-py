@@ -10,6 +10,7 @@ from did_webvh.core.resolver import (
     DidResolver,
     HistoryResolver,
     HistoryVerifier,
+    ResolutionError,
     ResolutionResult,
     dereference_fragment,
     normalize_services,
@@ -394,3 +395,19 @@ async def test_resolve_history_terminates_on_a_whitespace_log(blank):
     )
     assert result.document is None
     assert result.resolution_metadata["error"]
+
+
+def test_serialize_reports_content_type_for_a_resolved_document():
+    result = ResolutionResult(
+        document={"id": "did:webvh:QmScid:example.com"}, document_metadata={}
+    )
+    assert result.serialize()["didResolutionMetadata"] == {
+        "contentType": "application/did+ld+json"
+    }
+
+
+def test_serialize_keeps_error_metadata():
+    result = ResolutionResult(resolution_metadata=ResolutionError.not_found())
+    metadata = result.serialize()["didResolutionMetadata"]
+    assert metadata["error"] == "notFound"
+    assert metadata["contentType"] == "application/did+ld+json"
