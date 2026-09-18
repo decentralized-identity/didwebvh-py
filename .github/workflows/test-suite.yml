@@ -33,6 +33,9 @@ on:
       - main
     types: [opened, synchronize, reopened, ready_for_review]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -81,7 +84,9 @@ jobs:
 
       - name: Run the test suite
         working-directory: test-suite
-        run: scripts/run python "${{ steps.target.outputs.target }}"
+        env:
+          TARGET: ${{ steps.target.outputs.target }}
+        run: scripts/run python "$TARGET"
 
       - name: Upload results
         if: always()
