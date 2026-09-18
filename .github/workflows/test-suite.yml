@@ -1,0 +1,258 @@
+name: Interop Test Suite
+
+# Runs the did:webvh compliance / interop test suite
+# (https://github.com/decentralized-identity/didwebvh-test-suite) against the
+# code under test. The suite builds a Docker image that clones this library
+# from a git URL + branch, so the branch under test must be pushed to a public
+# repo -- which is always true for pull requests.
+#
+# The suite itself never fails: its entrypoint runs `pytest ... || true` because
+# cross-implementation DIFFs are its intended analytical output, not errors. So
+# this workflow judges the run by diffing the fresh status.md against the one
+# committed upstream: a PR fails when it makes a result *worse* than the
+# baseline, not merely because interop differences exist.
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-suite-ref:
+        description: "Ref of decentralized-identity/didwebvh-test-suite to run"
+        required: false
+        default: main
+      library-ref:
+        description: "Library under test as <repo-url>:<branch> (defaults to the current branch)"
+        required: false
+        default: ""
+      strict:
+        description: "Fail on any non-PASS result, even one already present in the baseline"
+        type: boolean
+        required: false
+        default: false
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-suite:
+    name: did:webvh test suite (python)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the test suite
+        uses: actions/checkout@v4
+        with:
+          repository: decentralized-identity/didwebvh-test-suite
+          ref: ${{ inputs.test-suite-ref || 'main' }}
+          path: test-suite
+
+      - name: Capture the committed baseline
+        working-directory: test-suite
+        run: |
+          # status.md as committed upstream -- the run overwrites it in place
+          if git show HEAD:implementations/python/status.md > "$RUNNER_TEMP/baseline-status.md" 2>/dev/null; then
+            echo "Captured baseline from $(git rev-parse --short HEAD)"
+          else
+            echo "No committed baseline; every non-PASS result will be reported as new"
+          fi
+
+      - name: Resolve the library under test
+        id: target
+        env:
+          OVERRIDE: ${{ inputs.library-ref }}
+          PR_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          DEFAULT_REPO: ${{ github.server_url }}/${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.ref_name }}
+        run: |
+          if [ -n "$OVERRIDE" ]; then
+            target="$OVERRIDE"
+          elif [ -n "$PR_REPO" ]; then
+            # clone_url ends in .git; drop it so the provenance footer reads cleanly
+            target="${PR_REPO%.git}:$PR_BRANCH"
+          else
+            target="$DEFAULT_REPO:$DEFAULT_BRANCH"
+          fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "Running the test suite against $target"
+
+      - name: Run the test suite
+        working-directory: test-suite
+        env:
+          TARGET: ${{ steps.target.outputs.target }}
+        run: scripts/run python "$TARGET"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-suite-results
+          path: |
+            test-suite/implementations/python/status.md
+            test-suite/implementations/python/diffs.txt
+            test-suite/vectors/*/python/
+          if-no-files-found: warn
+
+      - name: Check results
+        if: always()
+        working-directory: test-suite/implementations/python
+        env:
+          TARGET: ${{ steps.target.outputs.target }}
+          BASELINE: ${{ runner.temp }}/baseline-status.md
+          STRICT: ${{ inputs.strict }}
+        run: |
+          python3 <<'PY'
+          import os
+          import pathlib
+          import sys
+          from collections import Counter
+
+          # status.md rows carry an emoji + word; rank them so "worse than the
+          # baseline" is a comparison rather than a pile of special cases.
+          RANKS = {"PASS": 0, "SKIP": 1, "XFAIL": 1, "DIFF": 2, "FAIL": 3}
+
+          def code(result: str) -> str:
+              for name in RANKS:
+                  if name in result:
+                      return name
+              return "FAIL"
+
+          def parse(path: pathlib.Path) -> dict:
+              """Map (section, test case, log source, occurrence) -> result code.
+
+              A scenario resolved at several versions produces repeated rows with
+              the same test case and log source -- status.md does not name the
+              resolutionResult file -- so rows are keyed by occurrence to keep
+              them distinct.
+              """
+              rows, seen, section = {}, Counter(), None
+              for line in path.read_text().splitlines():
+                  if line.startswith("## "):
+                      section = line[3:].strip()
+                  elif line.startswith("|") and not line.startswith("|---") and "Result" not in line:
+                      cells = [c.strip() for c in line.strip("|").split("|")]
+                      if len(cells) >= 3:
+                          source = cells[1] if section == "Cross-Resolution" else ""
+                          key = (section, cells[0], source)
+                          rows[key + (seen[key],)] = code(cells[-2])
+                          seen[key] += 1
+              return rows
+
+          def describe(section, case, source, index) -> str:
+              return (f"{section}: {case}"
+                      + (f" ({source} logs)" if source else "")
+                      + (f" [#{index + 1}]" if index else ""))
+
+          status = pathlib.Path("status.md")
+          if not status.exists():
+              sys.exit("status.md was not produced -- the suite did not complete")
+
+          current = parse(status)
+          baseline_path = pathlib.Path(os.environ["BASELINE"])
+          baseline = parse(baseline_path) if baseline_path.exists() else {}
+
+          errors, changes = [], []
+          unchanged = Counter()  # (section, result, log source) -> row count
+          for key, result in sorted(current.items()):
+              section, case, source, _index = key
+              where = describe(*key)
+              before = baseline.get(key)
+
+              # Always fatal, regardless of the baseline: these are statements
+              # about this library's own correctness, not about interop.
+              if section in ("DID Creation", "Negative Resolution") and result == "FAIL":
+                  errors.append(f"{where} -- FAIL")
+              elif section == "Cross-Resolution" and source == "python" and result != "PASS":
+                  errors.append(f"{where} -- {result} (resolving our own logs must match exactly)")
+              elif before is None:
+                  if result != "PASS":
+                      changes.append(f"{where} -- {result} (no baseline row)")
+              elif RANKS[result] > RANKS[before]:
+                  errors.append(f"{where} -- {before} -> {result} (regression)")
+              elif RANKS[result] < RANKS[before]:
+                  changes.append(f"{where} -- {before} -> {result} (improvement)")
+              elif result != "PASS":
+                  unchanged[(section, result, source)] += 1
+
+          for key in sorted(set(baseline) - set(current)):
+              changes.append(f"{describe(*key)} -- present in the baseline, missing from this run")
+
+          # Every foreign comparison DIFFs on resolution-envelope shape alone, so
+          # the comparison can never go green. What the row does tell us is that
+          # our resolver read and verified another implementation's log at all:
+          # PASS/DIFF = consumed, FAIL = rejected or threw, SKIP = no artifacts.
+          foreign = Counter(
+              result for (section, _case, source, _i), result in current.items()
+              if section == "Cross-Resolution" and source not in ("", "python")
+          )
+          consumed = foreign["PASS"] + foreign["DIFF"]
+          attempted = consumed + foreign["FAIL"]
+
+          if os.environ.get("STRICT", "").lower() == "true":
+              errors.extend(c for c in changes if "improvement" not in c)
+              errors.extend(
+                  f"{section}: {n} unchanged {result} row(s)" + (f" ({source} logs)" if source else "")
+                  for (section, result, source), n in sorted(unchanged.items())
+              )
+              changes, unchanged = [], Counter()
+
+          counts = Counter(current.values())
+          base_counts = Counter(baseline.values())
+          summary = [
+              "### Test suite results",
+              "",
+              f"Library under test: `{os.environ['TARGET']}`",
+              "",
+              "| Result | This run | Baseline |",
+              "|---|---|---|",
+          ]
+          for name in ("PASS", "DIFF", "FAIL", "SKIP", "XFAIL"):
+              if counts[name] or base_counts[name]:
+                  summary.append(f"| {name} | {counts[name]} | {base_counts[name] if baseline else '-'} |")
+          summary += [
+              "",
+              f"Foreign logs consumed: {consumed}/{attempted}"
+              " (a DIFF still means the log resolved; only the output envelope differs)",
+              "",
+              f"{len(errors)} regression(s), {len(changes)} change(s) vs the baseline.",
+              "",
+          ]
+          if errors:
+              summary += ["#### Regressions", ""] + [f"- {e}" for e in errors] + [""]
+          if changes:
+              summary += ["#### Changes vs the baseline", ""] + [f"- {c}" for c in changes] + [""]
+          if unchanged:
+              groups = {}
+              for (section, result, source), n in unchanged.items():
+                  groups.setdefault((section, result), Counter())[source] += n
+              summary += ["#### Unchanged differences (also present in the baseline)", ""]
+              for (section, result), sources in sorted(groups.items()):
+                  detail = ", ".join(f"{s} {n}" for s, n in sorted(sources.items()) if s)
+                  summary.append(f"- {section} -- {sum(sources.values())} x {result}"
+                                 + (f" ({detail})" if detail else ""))
+              summary.append("")
+          summary += ["<details><summary>Full status.md</summary>", "", status.read_text(), "", "</details>", ""]
+
+          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step_summary:
+              with open(step_summary, "a") as fh:
+                  fh.write("\n".join(summary) + "\n")
+
+          for change in changes:
+              print(f"::warning::{change}")
+          for error in errors:
+              print(f"::error::{error}")
+
+          print(f"PASS={counts['PASS']} DIFF={counts['DIFF']} FAIL={counts['FAIL']} "
+                f"SKIP={counts['SKIP']} XFAIL={counts['XFAIL']}; "
+                f"foreign logs consumed {consumed}/{attempted}")
+          if errors:
+              sys.exit(f"{len(errors)} regression(s) against the committed baseline")
+          print("No regressions against the committed baseline.")
+          PY
