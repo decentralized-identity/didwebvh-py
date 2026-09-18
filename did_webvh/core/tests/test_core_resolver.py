@@ -112,7 +112,7 @@ async def test_resolve_history():
     )
     assert isinstance(res, ResolutionResult)
     assert isinstance(res.document, dict)
-    assert res.document_metadata["versionNumber"] == 2
+    assert res.document_metadata["versionId"].startswith("2-")
 
     res = await resolver.resolve("bad-docid", history)
     assert res.document is None

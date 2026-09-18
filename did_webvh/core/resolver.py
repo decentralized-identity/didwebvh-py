@@ -501,7 +501,6 @@ class DidResolver:
             portable=found.portable,
             scid=found.scid,
             version_id=found.version_id,
-            version_number=found.version_number,
             version_time=found.timestamp,
             watchers=found.watchers,
             witness=found.witness,
