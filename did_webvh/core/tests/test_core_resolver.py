@@ -1,5 +1,6 @@
 import json
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -36,8 +37,8 @@ class MockHistoryResolver(HistoryResolver):
 
 
 class MockHistoryVerifier(HistoryVerifier):
-    def __init__(self):
-        super().__init__(verify_proofs=False)
+    def __init__(self, **kwargs):
+        super().__init__(verify_proofs=False, **kwargs)
 
 
 mock_document = {
@@ -152,6 +153,124 @@ async def test_resolve_history_rejects_non_monotonic_version_time():
     assert res.resolution_metadata["problemDetails"]["detail"] == (
         "versionTime for version '2' must be greater than previous entry time"
     )
+
+
+FUTURE_HISTORY = [
+    {
+        "versionId": "1-QmV2AdEkGSvn3K5v7x73rFVMrhVxAUbDdPRhx2fmVRFpdE",
+        "versionTime": "2025-01-20T23:46:33Z",
+        "parameters": {
+            "method": "testmethod",
+            "scid": "QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH",
+        },
+        "state": {"id": "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH"},
+        "proof": [],
+    },
+    {
+        "versionId": "2-QmNabRHT8ykrWfePhqBV1zWgMAKwAn665ja8V8hekJ3pnH",
+        "versionTime": "2099-01-01T00:00:00Z",
+        "parameters": {},
+        "state": {"id": "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH"},
+        "proof": [],
+    },
+]
+
+
+@pytest.mark.parametrize(
+    "resolution_time,future_skew",
+    [
+        # default: the actual current time
+        (None, None),
+        # 10 minutes before versionTime, beyond the default 5 minute skew
+        (datetime(2098, 12, 31, 23, 50, tzinfo=timezone.utc), None),
+        # naive datetimes are treated as UTC
+        (datetime(2098, 12, 31, 23, 50), None),
+        # a custom skew
+        (datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc), timedelta(seconds=30)),
+    ],
+)
+async def test_resolve_history_rejects_future_version_time(resolution_time, future_skew):
+    history = MockHistoryResolver("\n".join(map(json.dumps, FUTURE_HISTORY)))
+    resolver = DidResolver(
+        MockHistoryVerifier(resolution_time=resolution_time, future_skew=future_skew)
+    )
+    res = await resolver.resolve(
+        "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH", history
+    )
+    assert res.document is None
+    assert res.resolution_metadata["error"] == "invalidDid"
+    skew = "30 seconds" if future_skew else "5 minutes"
+    assert res.resolution_metadata["problemDetails"]["detail"] == (
+        f"versionTime for version '2' must not be more than {skew} in the future"
+    )
+
+
+@pytest.mark.parametrize(
+    "resolution_time,future_skew",
+    [
+        # within the default 5 minute skew
+        (datetime(2098, 12, 31, 23, 56, tzinfo=timezone.utc), None),
+        # within a larger custom skew
+        (datetime(2098, 12, 31, 23, 50, tzinfo=timezone.utc), timedelta(minutes=15)),
+        # after versionTime
+        (datetime(2099, 6, 1, tzinfo=timezone.utc), timedelta(0)),
+    ],
+)
+async def test_resolve_history_accepts_version_time_within_skew(
+    resolution_time, future_skew
+):
+    history = MockHistoryResolver("\n".join(map(json.dumps, FUTURE_HISTORY)))
+    resolver = DidResolver(
+        MockHistoryVerifier(resolution_time=resolution_time, future_skew=future_skew)
+    )
+    res = await resolver.resolve(
+        "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH", history
+    )
+    assert res.document is not None, res.resolution_metadata
+    assert res.document_metadata["versionNumber"] == 2
+    assert res.document_metadata["versionTime"] == "2099-01-01T00:00:00Z"
+
+
+@pytest.mark.parametrize(
+    "resolution_time", [None, datetime(2099, 6, 1, tzinfo=timezone.utc)]
+)
+async def test_resolve_history_uses_a_fixed_resolution_time(resolution_time):
+    seen = []
+
+    class RecordingVerifier(MockHistoryVerifier):
+        def verify_state(self, *args):
+            seen.append(self._resolution_time)
+            return super().verify_state(*args)
+
+    history = MockHistoryResolver("\n".join(map(json.dumps, FUTURE_HISTORY)))
+    verifier = RecordingVerifier(resolution_time=resolution_time)
+    resolver = DidResolver(verifier)
+    await resolver.resolve(
+        "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH", history
+    )
+    assert len(seen) == 2
+    assert seen[0] is not None
+    assert seen[0] is seen[1]
+    assert seen[0] is verifier._resolution_time
+    if resolution_time:
+        assert seen[0] is resolution_time
+
+
+def test_history_verifier_rejects_negative_future_skew():
+    with pytest.raises(ValueError, match="future_skew"):
+        HistoryVerifier(future_skew=timedelta(minutes=-1))
+
+
+async def test_resolve_history_future_version_time_not_enforced():
+    history = MockHistoryResolver("\n".join(map(json.dumps, FUTURE_HISTORY)))
+    resolver = DidResolver(
+        HistoryVerifier(verify_proofs=False, enforce_future_skew=False)
+    )
+    res = await resolver.resolve(
+        "docid-QmadwVpf5ccxz7bGxaweiHSxFcN1MFG415GUpbN9Cnm1hH", history
+    )
+    assert res.document is not None, res.resolution_metadata
+    assert res.document_metadata["versionNumber"] == 2
 
 
 async def test_resolve_history_failed_request():

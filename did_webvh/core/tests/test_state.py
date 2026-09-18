@@ -572,10 +572,16 @@ def test_check_version_time_enforce_future_skew_optional(mock_document_state):
     state.timestamp = future
     state.timestamp_raw = "2024-09-11T18:29:32Z"
 
-    check_version_time(state, None, enforce_future_skew=False, now=fixed_now)
+    check_version_time(state, None, enforce_future_skew=False, resolution_time=fixed_now)
 
     with pytest.raises(InvalidDocumentState, match="5 minutes in the future"):
-        check_version_time(state, None, enforce_future_skew=True, now=fixed_now)
+        check_version_time(
+            state, None, enforce_future_skew=True, resolution_time=fixed_now
+        )
+
+    # enforced by default
+    with pytest.raises(InvalidDocumentState, match="5 minutes in the future"):
+        check_version_time(state, None, resolution_time=fixed_now)
 
 
 def test_verify_state_proofs_reports_a_mismatched_did_key():
@@ -590,7 +596,10 @@ def test_verify_state_proofs_reports_a_mismatched_did_key():
     other = AskarSigningKey.generate("ed25519")
     state = DocumentState.initial(
         {"updateKeys": [sk.multikey], "method": "did:webvh:1.0"},
-        {"@context": ["https://www.w3.org/ns/did/v1"], "id": "did:webvh:{SCID}:example.com"},
+        {
+            "@context": ["https://www.w3.org/ns/did/v1"],
+            "id": "did:webvh:{SCID}:example.com",
+        },
     )
     state.sign(sk)
     # Body names the authorized key; fragment names a different one.

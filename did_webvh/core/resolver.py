@@ -5,7 +5,7 @@ from asyncio import Event, Future, ensure_future, get_running_loop
 from collections.abc import Awaitable
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from inspect import isawaitable
 from pathlib import Path
 from typing import Optional
@@ -161,23 +161,47 @@ class LocalHistoryResolver(HistoryResolver):
 class HistoryVerifier:
     """Generic DID verifier class."""
 
-    def __init__(self, verify_proofs: bool = True, *, enforce_future_skew: bool = False):
+    _resolution_time: datetime | None = None
+    _future_skew: timedelta | None = None
+
+    def __init__(
+        self,
+        verify_proofs: bool = True,
+        *,
+        enforce_future_skew: bool = True,
+        future_skew: timedelta | None = None,
+        resolution_time: datetime | None = None,
+    ):
         """Constructor.
 
         Args:
             verify_proofs: Verify Data Integrity proofs on each log entry.
-            enforce_future_skew: When True, reject ``versionTime`` more than
-                five minutes in the future (spec SHOULD). Default False because
-                that tolerance is not a MUST.
+            enforce_future_skew: Reject `versionTime` values in the future,
+                as required by did:webvh.
+            future_skew: Permitted clock skew for `versionTime` (default 5 minutes).
+            resolution_time: The time to check `versionTime` against. Defaults
+                to the time the verifier is created, so that every log entry is
+                checked against the same time. Use a new verifier for each resolution.
+
         """
+        if future_skew is not None and future_skew < timedelta(0):
+            raise ValueError("future_skew must not be negative")
         self._verify_proofs = verify_proofs
         self._enforce_future_skew = enforce_future_skew
+        self._resolution_time = resolution_time or datetime.now(timezone.utc)
+        self._future_skew = future_skew
 
     def verify_state(
         self, state: DocumentState, prev_state: DocumentState | None, is_final: bool
     ) -> Awaitable[None] | None:
         """Verify a document state."""
-        check_version_time(state, prev_state, enforce_future_skew=self._enforce_future_skew)
+        check_version_time(
+            state,
+            prev_state,
+            enforce_future_skew=self._enforce_future_skew,
+            future_skew=self._future_skew,
+            resolution_time=self._resolution_time,
+        )
         if (
             prev_state
             and prev_state.document_id != state.document_id
@@ -262,7 +286,7 @@ class DidResolver:
                 or exactly matching the requested versionTime
         """
         try:
-            (state, doc_meta) = await self.resolve_state(
+            state, doc_meta = await self.resolve_state(
                 document_id,
                 source,
                 version_id=version_id,
@@ -480,7 +504,7 @@ class DidResolver:
 
         # check witness proofs
         if witness_load_task:
-            (validated, _errs) = await witness_load_task
+            validated, _errs = await witness_load_task
             checks = WitnessChecks(rules=witness_checks, versions=version_ids)
             valid = checks.verify(validated)
             if not valid and found.version_number < state.version_number:

@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import json
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .core.did_url import DIDUrl
@@ -69,14 +69,19 @@ async def resolve_did(
     version_number: int | str | None = None,
     version_time: datetime | str | None = None,
     add_implicit: bool = True,
+    resolution_time: datetime | None = None,
+    future_skew: timedelta | None = None,
 ) -> ResolutionResult:
     """Resolve a did:webvh DID or DID URL.
 
-    Resolution parameters within a DID URL are not applied.
+    Resolution parameters within a DID URL are not applied. `resolution_time` and
+    `future_skew` control the check that no log entry's versionTime is in the future
+    (defaults: now, 5 minutes).
     """
     didurl = DIDUrl.decode(did) if isinstance(did, str) else did
     source = did_history_resolver(local_history=local_history)
-    result = await DidResolver(WebvhVerifier()).resolve(
+    verifier = WebvhVerifier(resolution_time=resolution_time, future_skew=future_skew)
+    result = await DidResolver(verifier).resolve(
         didurl.did,
         source,
         version_id=version_id,
@@ -123,7 +128,13 @@ async def _resolve_relative_ref(
         )
 
 
-async def resolve(didurl: str, *, local_history: Path | None = None) -> dict:
+async def resolve(
+    didurl: str,
+    *,
+    local_history: Path | None = None,
+    resolution_time: datetime | None = None,
+    future_skew: timedelta | None = None,
+) -> dict:
     """Resolve a did:webvh DID URL, applying any included DID resolution parameters."""
     try:
         didurl = DIDUrl.decode(didurl)
@@ -153,6 +164,8 @@ async def resolve(didurl: str, *, local_history: Path | None = None) -> dict:
         version_id=version_id,
         version_number=version_number,
         version_time=version_time,
+        resolution_time=resolution_time,
+        future_skew=future_skew,
     )
 
     if service_name and relative_ref and result.document:

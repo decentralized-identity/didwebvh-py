@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Union
 
-MAX_FUTURE_SKEW = timedelta(minutes=5)
+DEFAULT_FUTURE_SKEW = timedelta(minutes=5)
 
 
 def iso_format_datetime(dt: datetime) -> str:
@@ -13,7 +13,9 @@ def iso_format_datetime(dt: datetime) -> str:
     return dt.isoformat().replace("+00:00", "Z")
 
 
-def make_timestamp(timestamp: Union[datetime, str, None] = None) -> tuple[datetime, str]:
+def make_timestamp(
+    timestamp: Union[datetime, str, None] = None,
+) -> tuple[datetime, str]:
     """Convert from either a string or datetime value into a pair of both."""
     if not timestamp:
         timestamp = datetime.now(timezone.utc).replace(microsecond=0)
@@ -36,9 +38,9 @@ def create_next_version_time(
     previous_version_time: str,
     requested_version_time: Union[datetime, str, None] = None,
 ) -> tuple[datetime, str]:
-    """Choose a versionTime strictly after the previous log entry.
+    """Choose a `versionTime` strictly after the previous log entry.
 
-    Mirrors didwebvh-ts ``createNextVersionTime``: use the current time when it
+    Mirrors didwebvh-ts `createNextVersionTime`: use the current time when it
     is already later than the previous entry, otherwise bump by one second.
     """
     previous, _ = make_timestamp(previous_version_time)
