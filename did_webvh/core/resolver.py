@@ -524,6 +524,7 @@ class DidResolver:
             deactivated=found.deactivated,
             portable=found.portable,
             scid=found.scid,
+            ttl=str(found.ttl),
             version_id=found.version_id,
             version_number=found.version_number,
             version_time=found.timestamp,

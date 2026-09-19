@@ -23,6 +23,8 @@ from .witness import WitnessRule
 
 AUTHZ_PARAMS = {"nextKeyHashes", "updateKeys"}
 DEFAULT_METHOD = f"did:{METHOD_NAME}:{METHOD_VERSION}"
+DEFAULT_TTL = 3600
+MAX_TTL = 2**31
 
 
 class InvalidDocumentState(ValueError):
@@ -48,6 +50,7 @@ class DocumentMetadata:
     version_time: datetime
     deactivated: bool = False
     portable: bool = False
+    ttl: str = str(DEFAULT_TTL)
     watchers: list | None = None
     witness: dict | None = None
 
@@ -59,6 +62,7 @@ class DocumentMetadata:
             "deactivated": self.deactivated,
             "portable": self.portable,
             "scid": self.scid,
+            "ttl": self.ttl,
             "versionId": self.version_id,
             "versionNumber": self.version_number,
             "versionTime": iso_format_datetime(self.version_time),
@@ -534,6 +538,16 @@ class DocumentState:
         return self.params["scid"]
 
     @property
+    def ttl(self) -> int:
+        """Fetch the `ttl` parameter in seconds, defaulting to one hour.
+
+        A `null` value is deprecated but treated as a request for the default,
+        as resolvers are asked to accept it for compatibility.
+        """
+        ttl = self.params.get("ttl")
+        return DEFAULT_TTL if ttl is None else ttl
+
+    @property
     def update_keys(self) -> list[str]:
         """Fetch a list of the `updateKeys` entries from the parameters."""
         upd_keys = self.params.get("updateKeys")
@@ -699,7 +713,14 @@ class DocumentState:
                         )
                     )
             elif param == "ttl":
-                if not isinstance(pvalue, int) or pvalue <= 0:
+                # 0 is valid and means the DID should not be cached; a null
+                # value is deprecated but accepted as a request for the default
+                # MAX_TTL is excluded as per RFC 2181
+                if pvalue is not None and (
+                    isinstance(pvalue, bool)
+                    or not isinstance(pvalue, int)
+                    or not 0 <= pvalue < MAX_TTL
+                ):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_parameter(
                             "Unsupported value for 'ttl' parameter",

@@ -35,6 +35,8 @@ async def test_provision_resolve_local(domain_path: str, prerotation: bool):
     )
     assert res.get("didDocument")
     assert res.get("didDocumentMetadata")
+    # a string, defaulted when the parameter is not set
+    assert res["didDocumentMetadata"]["ttl"] == "3600"
 
 
 async def test_update_resolve_fragment():

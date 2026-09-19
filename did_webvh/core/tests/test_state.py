@@ -8,6 +8,7 @@ import pytest
 from did_webvh.askar import AskarSigningKey
 from did_webvh.core.hash_utils import HashInfo
 from did_webvh.core.state import (
+    MAX_TTL,
     DocumentState,
     InvalidDocumentState,
     check_version_time,
@@ -608,3 +609,42 @@ def test_verify_state_proofs_reports_a_mismatched_did_key():
     with pytest.raises(InvalidDocumentState) as raised:
         verify_state_proofs(state, None)
     assert raised.value.problem_details.type.endswith("#proof-verification-failed")
+
+
+def _ttl_state(params: dict) -> DocumentState:
+    """Build a genesis state directly, bypassing SCID derivation over the params."""
+    return DocumentState.initial(
+        params={
+            "updateKeys": ["z6MkrPW2qVDWmgrGn7j7G6SRKSzzkLuujC8oV9wMUzSPQoL4"],
+            **params,
+        },
+        document={
+            "@context": ["https://www.w3.org/ns/did/v1"],
+            "id": "did:webvh:{SCID}:domain.example",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "params,expected",
+    [
+        ({}, 3600),  # not set in the first log entry
+        ({"ttl": None}, 3600),  # deprecated, accepted as a request for the default
+        ({"ttl": 0}, 0),  # the DID should not be cached
+        ({"ttl": 60}, 60),
+        ({"ttl": MAX_TTL - 1}, MAX_TTL - 1),
+    ],
+)
+def test_ttl_parameter(params: dict, expected: int):
+    assert _ttl_state(params).ttl == expected
+
+
+@pytest.mark.parametrize("ttl", [None, 0, 60, MAX_TTL - 1])
+def test_valid_ttl_parameter_accepted_on_load(ttl):
+    assert DocumentState._update_params({}, {"ttl": ttl}) == {"ttl": ttl}
+
+
+@pytest.mark.parametrize("ttl", [-1, MAX_TTL, True, False, "3600", 1.5, []])
+def test_invalid_ttl_parameter_rejected_on_load(ttl):
+    with pytest.raises(InvalidDocumentState):
+        DocumentState._update_params({}, {"ttl": ttl})
