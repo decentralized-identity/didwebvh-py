@@ -23,7 +23,7 @@ def test_extend_services():
 @pytest.mark.parametrize("prerotation", (True, False))
 async def test_provision_resolve_local(domain_path: str, prerotation: bool):
     tempdir = TemporaryDirectory("didwebvh")
-    (doc_dir, state, key) = await auto_provision_did(
+    doc_dir, state, key = await auto_provision_did(
         domain_path,
         "ed25519",
         "passkey",
@@ -35,13 +35,13 @@ async def test_provision_resolve_local(domain_path: str, prerotation: bool):
     )
     assert res.get("didDocument")
     assert res.get("didDocumentMetadata")
-    # a string, defaulted when the parameter is not set
     assert res["didDocumentMetadata"]["ttl"] == "3600"
+    assert res["didResolutionMetadata"]["contentType"] == "application/did+ld+json"
 
 
 async def test_update_resolve_fragment():
     tempdir = TemporaryDirectory("didwebvh")
-    (doc_dir, state, _key) = await auto_provision_did(
+    doc_dir, state, _key = await auto_provision_did(
         "domain.example",
         "ed25519",
         "passkey",
@@ -53,7 +53,8 @@ async def test_update_resolve_fragment():
         json.dump(doc, out)
     state = await auto_update_did(doc_dir, "passkey")
     res = await resolve(
-        state.document_id + "#fragment", local_history=doc_dir.joinpath(HISTORY_FILENAME)
+        state.document_id + "#fragment",
+        local_history=doc_dir.joinpath(HISTORY_FILENAME),
     )
     assert not res.get("didDocument")
     assert res.get("content")

@@ -99,11 +99,12 @@ class DocumentState:
 
         if isinstance(document, str):
             document_str = document
-            document = json.loads(document)
+            document_dict = json.loads(document)
         else:
             document_str = json.dumps(document)
+            document_dict = document
 
-        doc_id = document.get("id")
+        doc_id = document_dict.get("id")
         if not isinstance(doc_id, str):
             raise ValueError("Expected string for DID document id")
         if SCID_PLACEHOLDER not in doc_id:
@@ -117,7 +118,7 @@ class DocumentState:
         genesis = DocumentState(
             params=params,
             params_update=params.copy(),
-            document=document,
+            document=document_dict,
             last_version_id=SCID_PLACEHOLDER,
             timestamp=timestamp,
             timestamp_raw=timestamp_raw,
@@ -295,13 +296,13 @@ class DocumentState:
             timestamp,
         )
         if isinstance(document, str):
-            document = json.loads(document)
+            document_dict = json.loads(document)
         else:
-            document = deepcopy(self.document if document is None else document)
+            document_dict = deepcopy(self.document if document is None else document)
         ret = DocumentState(
             params=params,
             params_update=params_update,
-            document=document,
+            document=document_dict,
             timestamp=timestamp,
             timestamp_raw=timestamp_raw,
             version_id="",
@@ -418,7 +419,9 @@ class DocumentState:
                 document = deepcopy(v)
 
             elif k == "proof":
-                if not isinstance(v, list) or any(not isinstance(prf, dict) for prf in v):
+                if not isinstance(v, list) or any(
+                    not isinstance(prf, dict) for prf in v
+                ):
                     raise InvalidDocumentState(
                         ProblemDetails.invalid_log_entry(
                             "Invalid `proof` property: expected list of objects.",
