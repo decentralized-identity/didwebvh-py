@@ -306,26 +306,9 @@ class DidResolver:
         except ResolutionError as err:
             return ResolutionResult(resolution_metadata=err)
 
-        if state.document_id != document_id:
-            res_result = ResolutionResult(
-                resolution_metadata=ResolutionError.invalid_did(
-                    ProblemDetails(
-                        type="#did-log-id-mismatch",
-                        title="Document ID mismatch",
-                        detail=(
-                            "A DID Log File was found, but the id in the DID Document"
-                            " does not match the DID being resolved."
-                        ),
-                        found=state.document_id,
-                        expected=document_id,
-                    ),
-                )
-            )
-        else:
-            res_result = ResolutionResult(
-                document=state.document, document_metadata=doc_meta.serialize()
-            )
-        return res_result
+        return ResolutionResult(
+            document=state.document, document_metadata=doc_meta.serialize()
+        )
 
     async def resolve_state(
         self,
@@ -337,11 +320,16 @@ class DidResolver:
         version_time: str | datetime | None = None,
         verify_witness: bool = True,
     ) -> tuple[DocumentState, DocumentMetadata]:
-        """Resolve a specific document state and document metadata."""
+        """Resolve a specific document state and document metadata.
+
+        When `document_id` is given, at least one valid log entry's `state.id` must
+        match it; for a portable DID that has moved, that may be an earlier entry.
+        """
         aborted_err: ResolutionError | None = None
         created: datetime | None = None
         exhausted: bool = False
         found: DocumentState | None = None
+        id_match_versions: list[int] = []
         prev_state: DocumentState | None = None
         state: DocumentState | None = None
         next_state: DocumentState | None = None
@@ -456,6 +444,8 @@ class DidResolver:
                     if isawaitable(verify):
                         verify_tasks.add_task(state.version_number, verify)
                 version_ids.append(state.version_id)
+                if document_id is not None and state.document_id == document_id:
+                    id_match_versions.append(state.version_number)
                 if (
                     verify_witness
                     and (witness_rule := (prev_state or state).witness_rule)
@@ -490,6 +480,7 @@ class DidResolver:
 
         # collect all verification results
         await verify_tasks
+        last_valid_version = state.version_number
         if verify_tasks.failed:
             failed_numbers = list(verify_tasks.failed.keys())
             failed_numbers.sort()
@@ -498,9 +489,27 @@ class DidResolver:
             if failed_ver <= found.version_number:
                 raise ResolutionError.invalid_did(failed_errs[0].problem_details)
             else:
+                last_valid_version = failed_ver - 1
                 # FIXME add failed version info to resolution metadata
                 # adjust 'updated'?
-                pass
+
+        # the DID being resolved must be the id of at least one valid entry
+        # (didIdMatchCount): a portable DID stays resolvable by a prior id
+        if document_id is not None and not any(
+            ver <= last_valid_version for ver in id_match_versions
+        ):
+            raise ResolutionError.invalid_did(
+                ProblemDetails(
+                    type="#did-log-id-mismatch",
+                    title="Document ID mismatch",
+                    detail=(
+                        "A DID Log File was found, but no id in its DID Documents"
+                        " matches the DID being resolved."
+                    ),
+                    found=found.document_id,
+                    expected=document_id,
+                ),
+            )
 
         # check witness proofs
         if witness_load_task:

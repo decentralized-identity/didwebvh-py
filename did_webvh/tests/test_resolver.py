@@ -57,3 +57,40 @@ async def test_update_resolve_fragment():
     )
     assert not res.get("didDocument")
     assert res.get("content")
+
+
+async def test_moved_portable_did_resolves_by_prior_id():
+    tempdir = TemporaryDirectory("didwebvh")
+    (doc_dir, state, _key) = await auto_provision_did(
+        "domain.example",
+        "ed25519",
+        "passkey",
+        extra_params={"portable": True},
+        target_dir=tempdir.name,
+    )
+    prior_id = state.document_id
+    moved_id = prior_id.replace(":domain.example", ":moved.example")
+    moved = json.loads(json.dumps(state.document_copy()).replace(prior_id, moved_id))
+    moved["alsoKnownAs"] = [prior_id]
+    with open(doc_dir.joinpath(DOCUMENT_FILENAME), "w") as out:
+        json.dump(moved, out)
+    state = await auto_update_did(doc_dir, "passkey")
+    assert state.document_id == moved_id
+    history = doc_dir.joinpath(HISTORY_FILENAME)
+
+    # An entry's state.id matches each identifier, so both resolve to the
+    # latest DIDDoc.
+    for did in (moved_id, prior_id):
+        res = await resolve(did, local_history=history)
+        assert "error" not in (res.get("didResolutionMetadata") or {}), did
+        assert res["didDocument"]["id"] == moved_id
+        assert res["didDocument"]["alsoKnownAs"] == [prior_id]
+
+    # No entry's state.id matches this one.
+    other_id = prior_id.replace(":domain.example", ":other.example")
+    res = await resolve(other_id, local_history=history)
+    assert res.get("didDocument") is None
+    assert res["didResolutionMetadata"]["error"] == "invalidDid"
+    assert res["didResolutionMetadata"]["problemDetails"]["type"].endswith(
+        "#did-log-id-mismatch"
+    )
