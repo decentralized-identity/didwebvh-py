@@ -322,8 +322,11 @@ class DidResolver:
                 )
             )
         else:
+            # A resolver must not return the DIDDoc of a deactivated DID, and must
+            # signal the deactivation in the metadata (did:webvh v1.0, Deactivate).
             res_result = ResolutionResult(
-                document=state.document, document_metadata=doc_meta.serialize()
+                document=None if doc_meta.deactivated else state.document,
+                document_metadata=doc_meta.serialize(),
             )
         return res_result
 

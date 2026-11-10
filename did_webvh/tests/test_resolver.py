@@ -57,3 +57,29 @@ async def test_update_resolve_fragment():
     )
     assert not res.get("didDocument")
     assert res.get("content")
+
+
+async def test_deactivated_did_returns_no_document():
+    tempdir = TemporaryDirectory("didwebvh")
+    (doc_dir, state, _key) = await auto_provision_did(
+        "domain.example",
+        "ed25519",
+        "passkey",
+        target_dir=tempdir.name,
+    )
+    with open(doc_dir.joinpath(DOCUMENT_FILENAME), "w") as out:
+        json.dump(state.document_copy(), out)
+    state = await auto_update_did(doc_dir, "passkey", params_update={"deactivated": True})
+    history = doc_dir.joinpath(HISTORY_FILENAME)
+
+    # The latest version is deactivated: no DIDDoc, and the metadata says so.
+    res = await resolve(state.document_id, local_history=history)
+    assert "error" not in (res.get("didResolutionMetadata") or {})
+    assert res.get("didDocument") is None
+    assert res["didDocumentMetadata"]["deactivated"] is True
+    assert res["didDocumentMetadata"]["versionNumber"] == 2
+
+    # The version before the deactivation still resolves to its DIDDoc.
+    res = await resolve(state.document_id + "?versionNumber=1", local_history=history)
+    assert res.get("didDocument")
+    assert res["didDocument"]["id"] == state.document_id
