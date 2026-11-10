@@ -7,9 +7,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Union
 
-import aries_askar
-
-from .askar import AskarSigningKey
 from .const import ASKAR_STORE_FILENAME, DOCUMENT_FILENAME, HISTORY_FILENAME
 from .core.state import DocumentState
 from .core.types import SigningKey
@@ -24,7 +21,15 @@ async def auto_update_did(
     params_update: dict = None,
     timestamp: Union[datetime, str] = None,
 ) -> DocumentState:
-    """Automatically update a history log."""
+    """Automatically update a history log.
+
+    The signing key is read from the local Askar store, which requires the
+    `askar` extra.
+    """
+    import aries_askar
+
+    from .askar import AskarSigningKey
+
     doc_path = doc_dir.joinpath(DOCUMENT_FILENAME)
     if not doc_path.is_file():
         raise ValueError(f"Document file ({DOCUMENT_FILENAME}) not found")

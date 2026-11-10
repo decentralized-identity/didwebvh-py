@@ -8,8 +8,8 @@ from typing import Optional
 import jcs
 from multiformats import multibase
 
-from ..askar import AskarVerifyingKey
 from .date_utils import make_timestamp
+from .public_key import PublicKey
 from .types import SigningKey, VerifyingKey
 
 # Supported Data Integrity suites
@@ -84,7 +84,7 @@ def di_jcs_verify(proof_input: dict, proof: dict, method: VerifyingKey | dict):
         make_timestamp(created)  # validate timestamp formatting only
 
     if isinstance(method, dict):
-        vkey = AskarVerifyingKey.from_multikey(method.get("publicKeyMultibase"))
+        vkey = PublicKey.from_multikey(method.get("publicKeyMultibase"))
     else:
         vkey = method
     codec = vkey.multicodec_name

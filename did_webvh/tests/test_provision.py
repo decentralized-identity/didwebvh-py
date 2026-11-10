@@ -2,12 +2,16 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from did_webvh.askar import AskarSigningKey
 from did_webvh.provision import (
     auto_provision_did,
     encode_verification_method,
     genesis_document,
 )
+
+# these tests sign with keys from the optional Askar key store
+AskarSigningKey = pytest.importorskip(
+    "did_webvh.askar", exc_type=ImportError
+).AskarSigningKey
 
 TEST_DID = "did:webvh:QmWtQu5Vwi5n7oTz1NHKPtRJuBQmNneLXBGkQW9YBaGYk4:example.com"
 

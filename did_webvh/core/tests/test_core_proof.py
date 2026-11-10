@@ -1,11 +1,15 @@
 import pytest
 
-from did_webvh.askar import AskarSigningKey
 from did_webvh.core.proof import (
     di_jcs_sign,
     di_jcs_verify,
 )
 from did_webvh.core.state import DocumentState
+
+# these tests sign with keys from the optional Askar key store
+AskarSigningKey = pytest.importorskip(
+    "did_webvh.askar", exc_type=ImportError
+).AskarSigningKey
 
 
 def test_jcs_sign():

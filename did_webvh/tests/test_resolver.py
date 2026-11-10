@@ -22,6 +22,7 @@ def test_extend_services():
 @pytest.mark.parametrize("domain_path", ("domain.example", "domain.example/path"))
 @pytest.mark.parametrize("prerotation", (True, False))
 async def test_provision_resolve_local(domain_path: str, prerotation: bool):
+    pytest.importorskip("aries_askar")  # the provisioned keys are kept in Askar
     tempdir = TemporaryDirectory("didwebvh")
     (doc_dir, state, key) = await auto_provision_did(
         domain_path,
@@ -40,6 +41,7 @@ async def test_provision_resolve_local(domain_path: str, prerotation: bool):
 
 
 async def test_update_resolve_fragment():
+    pytest.importorskip("aries_askar")  # the provisioned keys are kept in Askar
     tempdir = TemporaryDirectory("didwebvh")
     (doc_dir, state, _key) = await auto_provision_did(
         "domain.example",
@@ -60,6 +62,7 @@ async def test_update_resolve_fragment():
 
 
 async def test_deactivated_did_returns_no_document():
+    pytest.importorskip("aries_askar")  # the provisioned keys are kept in Askar
     tempdir = TemporaryDirectory("didwebvh")
     (doc_dir, state, _key) = await auto_provision_did(
         "domain.example",

@@ -9,12 +9,10 @@ from copy import deepcopy
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
-import aries_askar
 import jcs
 
-from .askar import AskarSigningKey
 from .const import (
     ASKAR_STORE_FILENAME,
     DOCUMENT_FILENAME,
@@ -27,6 +25,9 @@ from .core.proof import VerifyingKey
 from .core.state import DocumentState
 from .domain_path import DomainPath
 from .history import load_local_history, write_document_state
+
+if TYPE_CHECKING:
+    from .askar import AskarSigningKey
 
 DID_CONTEXT = "https://www.w3.org/ns/did/v1"
 DOMAIN_PATTERN = re.compile(r"^([a-zA-Z0-9%_\-]+\.)+[a-zA-Z0-9%_\.\-]{2,}$")
@@ -41,11 +42,16 @@ async def auto_provision_did(
     extra_params: dict | None = None,
     hash_name: str | None = None,
     target_dir: str | Path | None = None,
-) -> tuple[Path, DocumentState, AskarSigningKey]:
+) -> tuple[Path, DocumentState, "AskarSigningKey"]:
     """Automatically provision a new did:webvh DID.
 
-    This will create a new Askar store for key management.
+    This will create a new Askar store for key management, which requires the
+    `askar` extra.
     """
+    import aries_askar
+
+    from .askar import AskarSigningKey
+
     pathinfo = DomainPath.parse_normalized(domain_path)
     update_key = AskarSigningKey.generate(key_alg)
     placeholder_id = f"did:{METHOD_NAME}:{pathinfo.identifier}"
