@@ -5,7 +5,6 @@ from json import JSONDecodeError
 
 import pytest
 
-from did_webvh.askar import AskarSigningKey
 from did_webvh.core.hash_utils import HashInfo
 from did_webvh.core.state import (
     MAX_TTL,
@@ -14,6 +13,11 @@ from did_webvh.core.state import (
     check_version_time,
     verify_state_proofs,
 )
+
+# these tests sign with keys from the optional Askar key store
+AskarSigningKey = pytest.importorskip(
+    "did_webvh.askar", exc_type=ImportError
+).AskarSigningKey
 
 
 @pytest.fixture()

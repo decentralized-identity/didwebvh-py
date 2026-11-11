@@ -21,3 +21,21 @@ jobs:
       uses: ./.github/actions/unit-tests
       with:
         with-coverage: true
+
+  tests-without-askar:
+    name: tests (Alpine, without the askar extra)
+    runs-on: ubuntu-latest
+    container: python:3.12-alpine
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+    - name: Install dependencies
+      run: pip install poetry && poetry install
+    - name: Check that aries-askar is not installed
+      run: |
+        if poetry run python -c "import aries_askar" 2>/dev/null; then
+          echo "aries-askar is installed, but this job must run without it"
+          exit 1
+        fi
+    - name: Run unit tests
+      run: poetry run pytest -rs

@@ -1,4 +1,5 @@
-from did_webvh.askar import AskarSigningKey
+import pytest
+
 from did_webvh.core.proof import di_jcs_sign
 from did_webvh.core.witness import (
     WitnessChecks,
@@ -6,6 +7,11 @@ from did_webvh.core.witness import (
     WitnessRule,
     verify_witness_proofs,
 )
+
+# these tests sign with keys from the optional Askar key store
+AskarSigningKey = pytest.importorskip(
+    "did_webvh.askar", exc_type=ImportError
+).AskarSigningKey
 
 
 async def test_verify_witnesses():

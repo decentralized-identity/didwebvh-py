@@ -1,15 +1,23 @@
-"""Askar key store support for signing proofs."""
+"""Askar key store support for signing proofs.
+
+Requires the `askar` extra: `pip install "did-webvh[askar]"`.
+"""
 
 from typing import Optional
 
-from aries_askar import Key, KeyAlg
-from aries_askar.error import AskarError
+try:
+    from aries_askar import Key, KeyAlg
+    from aries_askar.error import AskarError
+except ModuleNotFoundError as exc:
+    raise ModuleNotFoundError(
+        "aries-askar is not installed. The Askar key store is optional: "
+        'install it with `pip install "did-webvh[askar]"`.',
+        name=exc.name,
+    ) from exc
 
 from .core.multi_key import MultiKey
+from .core.public_key import ALG_SUPPORTED
 from .core.types import SigningKey, VerifyingKey
-
-# Supported multicodec names mapped to key algorithms
-ALG_SUPPORTED = {"ed25519-pub": "ed25519", "p256-pub": "p256", "p384-pub": "p384"}
 
 
 class AskarVerifyingKey(VerifyingKey):

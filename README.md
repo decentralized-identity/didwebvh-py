@@ -7,12 +7,18 @@ This repository includes Python libraries for working with `did:webvh` (did:web 
 This library requires Python 3.10 or later. Dependencies are listed in pyproject.toml and can be installed via:
 
 ```sh
-poetry install
+poetry install --all-extras
+```
+
+Resolving DIDs and verifying DID logs needs only the default dependencies. The provision and update commands, the demo script and the `did_webvh.askar` module keep their keys in an [Askar](https://github.com/openwallet-foundation/askar) keystore, which is installed by the optional `askar` extra:
+
+```sh
+pip install "did-webvh[askar]"
 ```
 
 ## Usage
 
-A new `did:webvh` DID can be minted using the provision command. This will create a new Askar keystore for handling the signing key.
+A new `did:webvh` DID can be minted using the provision command. This will create a new Askar keystore for handling the signing key, and requires the `askar` extra.
 
 ```sh
 python3 -m did_webvh.provision --auto "domain.example"

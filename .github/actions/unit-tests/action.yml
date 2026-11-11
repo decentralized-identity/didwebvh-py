@@ -16,7 +16,7 @@ runs:
         python-version: '3.12'
     - name: Install dependencies
       shell: bash
-      run: pip install poetry && poetry install
+      run: pip install poetry && poetry install --all-extras
     - name: Run unit tests
       shell: bash
       run: | 
